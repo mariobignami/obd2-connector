@@ -17,11 +17,11 @@ class BaseConnector(ABC):
         pass
 
     def disconnect(self):
-        if self.connection and self.connection.isOpen():
+        if self.connection and self.connection.is_open:
             self.connection.close()
 
     def is_connected(self) -> bool:
-        return self.connection is not None and self.connection.isOpen()
+        return self.connection is not None and self.connection.is_open
 
     def send_command(self, command: str) -> str:
         if not self.is_connected():

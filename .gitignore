@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OBD2 export files
+obd2_export_*.csv
+obd2_export_*.json
+obd2_session_*.csv
+obd2_session_*.json
+
+# Misc
+*.DS_Store
+Thumbs.db
