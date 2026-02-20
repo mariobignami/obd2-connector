@@ -88,9 +88,12 @@ class OBDReader:
         """
         Read all defined PIDs and return a dict of {key: value | None}.
         Values are None when the vehicle does not support that PID.
+        MIL_STATUS is excluded from bulk scans (use read_mil_status() instead).
         """
         results: Dict[str, Any] = {}
         for key in OBD_PIDS:
+            if key == "MIL_STATUS":
+                continue
             results[key] = self.read_pid(key)
         return results
 
@@ -216,6 +219,18 @@ class OBDReader:
             return self.connector.send_command("AT RV").strip()
         except Exception:
             return "N/A"
+
+    def read_mil_status(self) -> Dict[str, Any]:
+        """
+        Read MIL (check engine light) status and DTC count via Mode 01 PID 01.
+
+        Returns a dict: {"mil_on": bool, "dtc_count": int}
+        or {"mil_on": None, "dtc_count": None} on error.
+        """
+        result = self.read_pid("MIL_STATUS")
+        if isinstance(result, dict):
+            return result
+        return {"mil_on": None, "dtc_count": None}
 
     # ------------------------------------------------------------------
     # Real-time streaming

@@ -1,6 +1,9 @@
+import logging
 import serial
 import time
 from .base import BaseConnector
+
+logger = logging.getLogger(__name__)
 
 
 class BluetoothConnector(BaseConnector):
@@ -11,7 +14,7 @@ class BluetoothConnector(BaseConnector):
 
     def connect(self) -> bool:
         try:
-            print(f"[BT] Connecting to Bluetooth OBD2 on port {self.port}...")
+            logger.info("[BT] Connecting to Bluetooth OBD2 on port %s…", self.port)
             self.connection = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
@@ -19,12 +22,12 @@ class BluetoothConnector(BaseConnector):
             )
             time.sleep(2)
             if self.connection.is_open:
-                print(f"[BT] Connected successfully on {self.port}")
+                logger.info("[BT] Connected successfully on %s", self.port)
                 self.initialize()
                 return True
             return False
         except serial.SerialException as e:
-            print(f"[BT][ERROR] Could not connect: {e}")
+            logger.error("[BT][ERROR] Could not connect: %s", e)
             return False
 
     @staticmethod
@@ -34,5 +37,5 @@ class BluetoothConnector(BaseConnector):
         ports = serial.tools.list_ports.comports()
         bt_ports = [p.device for p in ports if "bluetooth" in p.description.lower() or "rfcomm" in p.device.lower()]
         if not bt_ports:
-            print("[BT] No Bluetooth ports detected automatically. Please specify manually.")
+            logger.warning("[BT] No Bluetooth ports detected automatically. Please specify manually.")
         return bt_ports

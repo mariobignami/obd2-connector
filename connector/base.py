@@ -1,6 +1,9 @@
+import logging
 import serial
 import time
 from abc import ABC, abstractmethod
+
+logger = logging.getLogger(__name__)
 
 
 class BaseConnector(ABC):
@@ -46,14 +49,22 @@ class BaseConnector(ABC):
     def linefeeds_off(self) -> str:
         return self.send_command("AT L0")
 
+    def headers_off(self) -> str:
+        return self.send_command("AT H0")
+
+    def spaces_off(self) -> str:
+        return self.send_command("AT S0")
+
     def initialize(self) -> bool:
         try:
             self.reset()
             time.sleep(1)
             self.echo_off()
             self.linefeeds_off()
+            self.headers_off()
+            self.spaces_off()
             self.set_auto_protocol()
             return True
         except Exception as e:
-            print(f"[ERROR] Initialization failed: {e}")
+            logger.error("[ERROR] Initialization failed: %s", e)
             return False

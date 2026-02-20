@@ -183,7 +183,9 @@ class TestOBDReader:
         stub = _StubConnector("NO DATA")
         reader = OBDReader(stub)
         result = reader.read_all()
-        assert set(result.keys()) == set(OBD_PIDS.keys())
+        # MIL_STATUS is excluded from bulk scans (it returns a dict, not a scalar)
+        expected = {k for k in OBD_PIDS if k != "MIL_STATUS"}
+        assert set(result.keys()) == expected
         # All None because stub returns "NO DATA"
         assert all(v is None for v in result.values())
 
@@ -286,3 +288,177 @@ class TestExport:
         path = export_csv(data, path=str(tmp_path / "nones.csv"))
         content = (tmp_path / "nones.csv").read_text()
         assert "RPM" in content
+
+
+# ---------------------------------------------------------------------------
+# MIL Status
+# ---------------------------------------------------------------------------
+
+class TestMILStatus:
+    def test_mil_status_pid_present(self):
+        assert "MIL_STATUS" in OBD_PIDS
+
+    def test_mil_status_pid_fields(self):
+        info = OBD_PIDS["MIL_STATUS"]
+        assert info["mode"] == "01"
+        assert info["pid"] == "01"
+        assert info["bytes"] == 4
+
+    def test_mil_on_parse(self):
+        """Byte A bit 7 = 1 → MIL on, bits 0-6 = DTC count."""
+        parse = OBD_PIDS["MIL_STATUS"]["parse"]
+        # 0x81 = 10000001: MIL on, 1 DTC
+        result = parse([0x81, 0x00, 0x00, 0x00])
+        assert result["mil_on"] is True
+        assert result["dtc_count"] == 1
+
+    def test_mil_off_parse(self):
+        parse = OBD_PIDS["MIL_STATUS"]["parse"]
+        # 0x00 = MIL off, 0 DTCs
+        result = parse([0x00, 0x00, 0x00, 0x00])
+        assert result["mil_on"] is False
+        assert result["dtc_count"] == 0
+
+    def test_read_mil_status_no_data(self):
+        stub = _StubConnector("NO DATA")
+        reader = OBDReader(stub)
+        status = reader.read_mil_status()
+        assert status["mil_on"] is None
+        assert status["dtc_count"] is None
+
+    def test_read_mil_status_mil_on(self):
+        # Mode 01, PID 01: response mode = 0x41 = "41", PID = "01"
+        # data bytes: 0x83 = 10000011 (MIL on, 3 DTCs)
+        stub = _StubConnector("41 01 83 00 00 00")
+        reader = OBDReader(stub)
+        status = reader.read_mil_status()
+        assert status["mil_on"] is True
+        assert status["dtc_count"] == 3
+
+    def test_read_mil_not_in_read_all(self):
+        """read_all() must exclude MIL_STATUS (returns dict, not scalar)."""
+        stub = _StubConnector("NO DATA")
+        reader = OBDReader(stub)
+        result = reader.read_all()
+        assert "MIL_STATUS" not in result
+
+
+# ---------------------------------------------------------------------------
+# web/app.py – smoke tests
+# ---------------------------------------------------------------------------
+
+class TestWebApp:
+    def test_demo_app_sensors(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/sensors")
+            assert r.status_code == 200
+            data = r.get_json()
+            assert "sensors" in data
+            assert "rpm" in data["sensors"]
+
+    def test_demo_app_status(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/status")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert d["connected"] is True
+            assert d["mode"] == "demo"
+
+    def test_demo_app_dtc(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/dtc")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert "codes" in d
+
+    def test_demo_app_dtc_clear(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.post("/api/dtc/clear")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert d["success"] is True
+
+    def test_demo_app_vehicle_info(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/vehicle_info")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert "vin" in d
+            assert "protocol" in d
+
+    def test_demo_app_command(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.post("/api/command",
+                       json={"command": "AT RV"},
+                       content_type="application/json")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert "response" in d
+
+    def test_demo_app_command_no_body(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.post("/api/command",
+                       json={},
+                       content_type="application/json")
+            assert r.status_code == 400
+
+    def test_demo_app_export_csv(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/export")
+            assert r.status_code == 200
+            assert "text/csv" in r.content_type
+
+    def test_demo_app_mil(self):
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/mil")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert "mil_on" in d
+
+    def test_live_app_dtc_uses_reader_read_dtcs(self):
+        """Verify that the live app calls reader.read_dtcs() (not read_dtc())."""
+        from web.app import create_app
+
+        class _FakeReader:
+            def read_dtcs(self):
+                return ["P0143"]
+
+        app = create_app(reader=_FakeReader(), demo=False)
+        with app.test_client() as c:
+            r = c.get("/api/dtc")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert d["codes"] == ["P0143"]
+
+    def test_live_app_dtc_clear_uses_reader(self):
+        """Verify that DTC clear uses reader.clear_dtcs() (not writer.clear_dtc())."""
+        from web.app import create_app
+
+        class _FakeReader:
+            def clear_dtcs(self):
+                return "OK"
+
+        app = create_app(reader=_FakeReader(), demo=False)
+        with app.test_client() as c:
+            r = c.post("/api/dtc/clear")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert d["success"] is True

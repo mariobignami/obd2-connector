@@ -7,6 +7,7 @@ Usage examples:
   python main.py --mode serial    --port /dev/ttyUSB0
   python main.py --mode serial    --port COM4  --interactive
   python main.py --mode bluetooth --port COM3  --dash --interval 0.5 --log
+  python main.py --demo --web
   python main.py list-ports
 """
 
@@ -53,17 +54,47 @@ def _build_connector(mode: str, port: str, baudrate: int, timeout: int):
 @click.option("--scan",          is_flag=True,          help="Run a single sensor scan and exit.")
 @click.option("--info",          is_flag=True,          help="Show vehicle info (VIN, ECU, …) and exit.")
 @click.option("--dtc",           is_flag=True,          help="Show stored DTCs and exit.")
+@click.option("--web",           is_flag=True,          help="Start the web dashboard server.")
+@click.option("--demo",          is_flag=True,          help="Run in demo mode (no hardware required; implies --web).")
+@click.option("--web-port",  default=5000, show_default=True, help="Port for the web dashboard server.")
 @click.pass_context
-def cli(ctx, mode, port, baudrate, timeout, interactive, dash, interval, log, scan, info, dtc):
+def cli(ctx, mode, port, baudrate, timeout, interactive, dash, interval, log, scan, info, dtc,
+        web, demo, web_port):
     """🚗 OBD2 Connector – Python ELM327 diagnostic tool."""
 
     # If a sub-command is being invoked (e.g. list-ports) skip the rest
     if ctx.invoked_subcommand is not None:
         return
 
+    # Demo / web mode – no hardware required
+    if demo or web:
+        from web.app import create_app
+        from obd.reader import OBDReader
+        from obd.writer import OBDWriter
+
+        connector = reader = writer = None
+        if not demo and port:
+            connector = _build_connector(mode, port, baudrate, timeout)
+            console.print(f"[cyan]Connecting via [bold]{mode}[/bold] on [bold]{port}[/bold]…[/]")
+            if not connector.connect():
+                console.print("[red]Failed to connect. Check the port and adapter.[/]")
+                sys.exit(1)
+            reader = OBDReader(connector)
+            writer = OBDWriter(connector)
+
+        app = create_app(connector=connector, reader=reader, writer=writer, demo=(demo or connector is None))
+        console.print(f"[green]Web dashboard running at [bold]http://localhost:{web_port}[/bold][/]")
+        if demo:
+            console.print("[yellow]Demo mode – no hardware connected.[/]")
+        app.run(host="0.0.0.0", port=web_port, debug=False)
+        if connector:
+            connector.disconnect()
+        return
+
     if port is None:
         console.print("[red]Error: --port is required. Use 'list-ports' to discover available ports.[/]")
         console.print("  Example: python main.py --mode serial --port /dev/ttyUSB0")
+        console.print("  Tip:     python main.py --demo --web  (no hardware needed)")
         sys.exit(1)
 
     connector = _build_connector(mode, port, baudrate, timeout)
@@ -106,10 +137,16 @@ def list_ports():
     ports = SerialConnector.list_serial_ports()
     if not ports:
         console.print("  [dim](none found)[/]")
+    else:
+        for p in ports:
+            console.print(f"  [cyan]- {p}[/]")
     console.print("\n[bold]Likely Bluetooth ports:[/]")
     bt = BluetoothConnector.list_bluetooth_ports()
     if not bt:
         console.print("  [dim](none detected automatically)[/]")
+    else:
+        for p in bt:
+            console.print(f"  [cyan]- {p}[/]")
 
 
 if __name__ == "__main__":
