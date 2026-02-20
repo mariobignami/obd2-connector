@@ -54,7 +54,34 @@ python main.py --interactive
 
 ---
 
-## 📡 Comandos disponíveis no modo interativo
+## 🌐 Web Dashboard
+
+A modern browser-based dashboard is included and works without any hardware via **demo mode**.
+
+```bash
+# Start web dashboard (demo mode — no hardware needed)
+python main.py --web --demo
+
+# Start web dashboard with a real Bluetooth OBD2 device
+python main.py --web --mode bluetooth --port /dev/rfcomm0
+
+# Start web dashboard with a real USB/Serial OBD2 device
+python main.py --web --mode serial --port /dev/ttyUSB0
+
+# Access the dashboard at http://localhost:5000
+```
+
+Features:
+- Real-time SVG arc gauges (RPM, Speed, Coolant Temp, Engine Load, Throttle, Fuel, MAF…)
+- Server-Sent Events live updates every 2 seconds
+- DTC code reader and one-click clear
+- Raw AT/OBD2 command terminal
+- CSV export download
+- DEMO MODE banner when running without hardware
+
+---
+
+
 
 | Comando       | Descrição                          |
 |---------------|------------------------------------|

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OBD2 Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #21262d;
+    --accent:   #00ff88;
+    --accent2:  #00d4aa;
+    --warn:     #ff9500;
+    --danger:   #ff3b30;
+    --text:     #e6edf3;
+    --muted:    #7d8590;
+    --glow:     0 0 12px rgba(0,255,136,.35);
+    --glow2:    0 0 20px rgba(0,212,170,.25);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+  }
+
+  /* ── TOPBAR ────────────────────────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.3rem;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    letter-spacing: 2px;
+  }
+  .topbar-status {
+    display: flex; gap: 20px; align-items: center;
+    font-size: 0.85rem; color: var(--muted);
+  }
+  .status-dot {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--muted);
+    margin-right: 5px;
+    transition: background .3s;
+  }
+  .status-dot.connected { background: var(--accent); box-shadow: var(--glow); }
+  .demo-badge {
+    background: linear-gradient(135deg, #ff9500, #ff6b00);
+    color: #fff;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+    animation: pulse-warn 2s ease-in-out infinite;
+  }
+  @keyframes pulse-warn {
+    0%,100% { box-shadow: 0 0 6px rgba(255,149,0,.4); }
+    50%      { box-shadow: 0 0 18px rgba(255,149,0,.8); }
+  }
+
+  /* ── ACTIONS BAR ─────────────────────────────────── */
+  .actions {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding: 14px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .btn {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: .5px;
+    padding: 7px 18px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .btn:hover { border-color: var(--accent2); color: var(--accent2); box-shadow: var(--glow2); }
+  .btn-primary { border-color: var(--accent); color: var(--accent); }
+  .btn-primary:hover { background: rgba(0,255,136,.08); box-shadow: var(--glow); }
+  .btn-danger { border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: rgba(255,59,48,.08); }
+
+  /* ── MAIN GRID ───────────────────────────────────── */
+  main { padding: 24px; }
+  .section-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .gauge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  /* ── GAUGE CARD ──────────────────────────────────── */
+  .gauge-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .gauge-card:hover { border-color: var(--accent2); box-shadow: var(--glow2); }
+  .gauge-label {
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  /* SVG arc gauge */
+  .arc-gauge { position: relative; width: 140px; height: 80px; overflow: visible; }
+  .arc-track { stroke: var(--border); stroke-width: 10; fill: none; }
+  .arc-fill  { stroke: var(--accent); stroke-width: 10; fill: none;
+               stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+  .arc-fill.warn   { stroke: var(--warn); }
+  .arc-fill.danger { stroke: var(--danger); }
+
+  .gauge-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 6px;
+    transition: color .3s;
+    text-shadow: var(--glow);
+    letter-spacing: 1px;
+  }
+  .gauge-value.warn   { color: var(--warn); text-shadow: 0 0 10px rgba(255,149,0,.4); }
+  .gauge-value.danger { color: var(--danger); text-shadow: 0 0 10px rgba(255,59,48,.4); }
+  .gauge-unit {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 2px;
+    letter-spacing: 1px;
+  }
+
+  /* ── DTC SECTION ─────────────────────────────────── */
+  .dtc-section { margin-bottom: 28px; }
+  .dtc-list {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    min-height: 42px;
+    align-items: center;
+  }
+  .dtc-badge {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.8rem;
+    background: rgba(255,59,48,.12);
+    border: 1px solid rgba(255,59,48,.4);
+    color: var(--danger);
+    padding: 5px 14px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+  }
+  .dtc-clear {
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* ── TERMINAL ────────────────────────────────────── */
+  .terminal-section { margin-bottom: 10px; }
+  .terminal-box {
+    background: #010409;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem;
+    color: #adbac7;
+    min-height: 110px;
+    max-height: 220px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    line-height: 1.55;
+  }
+  .terminal-box .t-prompt { color: var(--accent2); }
+  .terminal-box .t-resp   { color: #adbac7; }
+  .terminal-box .t-err    { color: var(--danger); }
+  .terminal-input-row { display: flex; gap: 8px; }
+  .terminal-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .terminal-input:focus { border-color: var(--accent2); }
+  .terminal-input::placeholder { color: var(--muted); }
+
+  /* ── FOOTER ──────────────────────────────────────── */
+  footer {
+    text-align: center;
+    padding: 14px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── TOAST ───────────────────────────────────────── */
+  #toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all .3s;
+    pointer-events: none;
+    z-index: 999;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ─────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-logo">⬡ OBD2</div>
+  <div class="topbar-status">
+    {% if demo %}<span class="demo-badge">DEMO MODE</span>{% endif %}
+    <span><span class="status-dot" id="dot"></span><span id="status-text">Connecting…</span></span>
+    <span id="status-port" style="color:var(--text)">—</span>
+    <span id="status-mode" style="color:var(--muted)">—</span>
+  </div>
+</header>
+
+<!-- ── ACTIONS ────────────────────────────────────────── -->
+<div class="actions">
+  <button class="btn btn-primary" onclick="scanAll()">⟳ Scan All</button>
+  <button class="btn" onclick="readDTC()">⚠ Read DTCs</button>
+  <button class="btn btn-danger" onclick="clearDTC()">✕ Clear DTCs</button>
+  <button class="btn" onclick="exportCSV()">↓ Export CSV</button>
+  <button class="btn" id="stream-btn" onclick="toggleStream()">▶ Live Stream</button>
+</div>
+
+<!-- ── MAIN ───────────────────────────────────────────── -->
+<main>
+  <p class="section-title">Sensor Readings</p>
+  <div class="gauge-grid" id="gauge-grid">
+    <!-- cards injected by JS -->
+  </div>
+
+  <!-- DTC -->
+  <div class="dtc-section">
+    <p class="section-title">Diagnostic Trouble Codes</p>
+    <div class="dtc-list" id="dtc-list">
+      <span class="dtc-clear">No codes read yet — click "Read DTCs"</span>
+    </div>
+  </div>
+
+  <!-- Terminal -->
+  <div class="terminal-section">
+    <p class="section-title">Command Terminal</p>
+    <div class="terminal-box" id="terminal">
+      <span class="t-resp">// OBD2 Terminal ready — type AT or OBD2 commands below</span><br/>
+    </div>
+    <div class="terminal-input-row">
+      <input class="terminal-input" id="term-input" placeholder="e.g. AT RV  or  010C" onkeydown="termKeydown(event)"/>
+      <button class="btn btn-primary" onclick="termSend()">Send</button>
+    </div>
+  </div>
+</main>
+
+<footer>OBD2 Connector Dashboard &nbsp;·&nbsp; <span id="last-update">—</span></footer>
+<div id="toast"></div>
+
+<script>
+// ── GAUGE DEFINITIONS ──────────────────────────────────────────
+const GAUGES = [
+  { key:'rpm',          label:'Engine RPM',     min:0, max:8000,  warnAt:5500, dangerAt:7000 },
+  { key:'speed',        label:'Vehicle Speed',  min:0, max:220,   warnAt:160,  dangerAt:200  },
+  { key:'coolant_temp', label:'Coolant Temp',   min:50,max:130,   warnAt:105,  dangerAt:115  },
+  { key:'engine_load',  label:'Engine Load',    min:0, max:100,   warnAt:75,   dangerAt:90   },
+  { key:'throttle',     label:'Throttle',       min:0, max:100,   warnAt:80,   dangerAt:95   },
+  { key:'fuel_level',   label:'Fuel Level',     min:0, max:100,   warnAt:15,   dangerAt:8    },
+  { key:'intake_temp',  label:'Intake Air Temp',min:0, max:80,    warnAt:50,   dangerAt:65   },
+  { key:'maf',          label:'MAF Sensor',     min:0, max:50,    warnAt:35,   dangerAt:45   },
+  { key:'timing',       label:'Timing Advance', min:-20,max:60,   warnAt:50,   dangerAt:55   },
+];
+
+// Arc geometry: half-circle, cx=70, cy=70, r=55, from 180° to 0° (left→right)
+const CX=70, CY=70, R=55;
+const ARC_LEN = Math.PI * R; // half-circle circumference
+
+function polarToXY(angleDeg, r) {
+  const a = (angleDeg * Math.PI) / 180;
+  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+}
+
+function buildGaugeCard(g) {
+  const card = document.createElement('div');
+  card.className = 'gauge-card';
+  card.innerHTML = `
+    <div class="gauge-label">${g.label}</div>
+    <svg class="arc-gauge" viewBox="0 0 140 80">
+      <path class="arc-track" d="M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}"/>
+      <path class="arc-fill" id="arc-${g.key}"
+            d="M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}"
+            stroke-dasharray="${ARC_LEN}"
+            stroke-dashoffset="${ARC_LEN}"/>
+    </svg>
+    <div class="gauge-value" id="val-${g.key}">—</div>
+    <div class="gauge-unit"  id="unit-${g.key}"></div>
+  `;
+  return card;
+}
+
+function initGauges() {
+  const grid = document.getElementById('gauge-grid');
+  GAUGES.forEach(g => grid.appendChild(buildGaugeCard(g)));
+}
+
+function updateGauge(g, value, unit) {
+  const valEl  = document.getElementById(`val-${g.key}`);
+  const arcEl  = document.getElementById(`arc-${g.key}`);
+  const unitEl = document.getElementById(`unit-${g.key}`);
+  if (value === null || value === undefined) return;
+
+  // Clamp
+  const span = g.max - g.min;
+  const pct  = Math.max(0, Math.min(1, (value - g.min) / span));
+  const offset = ARC_LEN * (1 - pct);
+
+  arcEl.style.strokeDashoffset = offset;
+
+  // Color
+  const isBelowWarn = g.key === 'fuel_level'; // invert: low is bad
+  let cls = '';
+  if (isBelowWarn) {
+    if (value <= g.dangerAt) cls = 'danger';
+    else if (value <= g.warnAt) cls = 'warn';
+  } else {
+    if (value >= g.dangerAt) cls = 'danger';
+    else if (value >= g.warnAt) cls = 'warn';
+  }
+  arcEl.className = 'arc-fill' + (cls ? ' ' + cls : '');
+  valEl.className = 'gauge-value' + (cls ? ' ' + cls : '');
+
+  const disp = typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(1)) : value;
+  valEl.textContent = disp;
+  unitEl.textContent = unit || '';
+}
+
+// ── SENSOR DATA ────────────────────────────────────────────────
+function applySensorData(sensors) {
+  GAUGES.forEach(g => {
+    const s = sensors[g.key];
+    if (s) updateGauge(g, s.value, s.unit);
+  });
+  document.getElementById('last-update').textContent = 'Last update: ' + new Date().toLocaleTimeString();
+}
+
+async function scanAll() {
+  showToast('Scanning sensors…');
+  try {
+    const r = await fetch('/api/sensors');
+    const d = await r.json();
+    applySensorData(d.sensors || {});
+    showToast('Scan complete ✓');
+  } catch(e) { showToast('Scan failed: ' + e, true); }
+}
+
+// ── STATUS ─────────────────────────────────────────────────────
+async function updateStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    const dot = document.getElementById('dot');
+    const txt = document.getElementById('status-text');
+    if (d.connected) {
+      dot.className = 'status-dot connected';
+      txt.textContent = 'Connected';
+    } else {
+      dot.className = 'status-dot';
+      txt.textContent = 'Disconnected';
+    }
+    document.getElementById('status-port').textContent = d.port || '—';
+    document.getElementById('status-mode').textContent = d.mode || '—';
+  } catch(_) {}
+}
+
+// ── DTC ────────────────────────────────────────────────────────
+async function readDTC() {
+  const el = document.getElementById('dtc-list');
+  el.innerHTML = '<span class="dtc-clear">Reading…</span>';
+  try {
+    const r = await fetch('/api/dtc');
+    const d = await r.json();
+    if (!d.codes || d.codes.length === 0) {
+      el.innerHTML = '<span class="dtc-clear" style="color:var(--accent)">✓ No fault codes</span>';
+    } else {
+      el.innerHTML = d.codes.map(c => `<span class="dtc-badge">${c}</span>`).join('');
+    }
+  } catch(e) { el.innerHTML = `<span class="dtc-clear" style="color:var(--danger)">Error: ${e}</span>`; }
+}
+
+async function clearDTC() {
+  if (!confirm('Clear all stored DTCs?')) return;
+  try {
+    const r = await fetch('/api/dtc/clear', {method:'POST'});
+    const d = await r.json();
+    if (d.success) {
+      showToast('DTCs cleared ✓');
+      document.getElementById('dtc-list').innerHTML = '<span class="dtc-clear" style="color:var(--accent)">✓ DTCs cleared</span>';
+    } else {
+      showToast('Clear failed', true);
+    }
+  } catch(e) { showToast('Error: ' + e, true); }
+}
+
+// ── EXPORT ─────────────────────────────────────────────────────
+function exportCSV() {
+  window.location.href = '/api/export';
+  showToast('Downloading CSV…');
+}
+
+// ── LIVE STREAM ────────────────────────────────────────────────
+let evtSource = null;
+function toggleStream() {
+  const btn = document.getElementById('stream-btn');
+  if (evtSource) {
+    evtSource.close(); evtSource = null;
+    btn.textContent = '▶ Live Stream';
+    btn.classList.remove('btn-primary');
+  } else {
+    evtSource = new EventSource('/api/stream');
+    evtSource.onmessage = e => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.sensors) applySensorData(d.sensors);
+        if (d.status)  applyStatus(d.status);
+      } catch(_) {}
+    };
+    evtSource.onerror = () => { evtSource.close(); evtSource = null; btn.textContent = '▶ Live Stream'; btn.classList.remove('btn-primary'); };
+    btn.textContent = '⏹ Stop Stream';
+    btn.classList.add('btn-primary');
+    showToast('Live stream started');
+  }
+}
+
+function applyStatus(s) {
+  const dot = document.getElementById('dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot' + (s.connected ? ' connected' : '');
+  txt.textContent = s.connected ? 'Connected' : 'Disconnected';
+  document.getElementById('status-port').textContent = s.port || '—';
+  document.getElementById('status-mode').textContent = s.mode || '—';
+}
+
+// ── TERMINAL ───────────────────────────────────────────────────
+const term = document.getElementById('terminal');
+
+function termAppend(html) {
+  term.innerHTML += html + '<br/>';
+  term.scrollTop = term.scrollHeight;
+}
+
+function termKeydown(e) {
+  if (e.key === 'Enter') termSend();
+}
+
+async function termSend() {
+  const inp = document.getElementById('term-input');
+  const cmd = inp.value.trim();
+  if (!cmd) return;
+  inp.value = '';
+  termAppend(`<span class="t-prompt">» ${cmd}</span>`);
+  try {
+    const r = await fetch('/api/command', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({command: cmd})
+    });
+    const d = await r.json();
+    if (d.error) termAppend(`<span class="t-err">ERROR: ${d.error}</span>`);
+    else termAppend(`<span class="t-resp">${(d.response||'(empty)').replace(/\n/g,'<br/>')}</span>`);
+  } catch(e) {
+    termAppend(`<span class="t-err">Fetch error: ${e}</span>`);
+  }
+}
+
+// ── TOAST ──────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, isErr=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = isErr ? 'var(--danger)' : 'var(--accent2)';
+  el.style.color = isErr ? 'var(--danger)' : 'var(--accent2)';
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── INIT ───────────────────────────────────────────────────────
+initGauges();
+updateStatus();
+scanAll();
+const STREAM_START_DELAY_MS = 600; // brief delay to let initial scan complete before streaming
+// Auto-start live stream
+setTimeout(toggleStream, STREAM_START_DELAY_MS);
+</script>
+</body>
+</html>
