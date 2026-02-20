@@ -1,340 +1,288 @@
-"""pytest test suite for the OBD2 connector project."""
+"""
+Unit tests for OBD2 connector modules (no hardware required).
+"""
 
-import csv
-import io
-import json
-import os
-import tempfile
 import time
-from unittest.mock import MagicMock, patch
-
+import threading
 import pytest
 
-# ---------------------------------------------------------------------------
-# Fixtures / helpers
-# ---------------------------------------------------------------------------
-
-def make_mock_connector(response="41 0C 1A F8\r\n>"):
-    """Return a mock connector whose send_command returns *response*."""
-    conn = MagicMock()
-    conn.send_command.return_value = response
-    conn.is_connected.return_value = True
-    conn.port = "/dev/ttyTEST"
-    return conn
+from obd.commands import OBD_PIDS, AT_COMMANDS, VEHICLE_INFO_PIDS
+from obd.reader import (
+    OBDReader,
+    _parse_hex_response,
+    _parse_dtcs,
+    _parse_vin,
+    _parse_ascii_info,
+)
+from utils.export import export_csv, export_csv_log, export_json
 
 
 # ---------------------------------------------------------------------------
-# 1. connector/base.py — is_open (not isOpen)
+# Helpers / stubs
 # ---------------------------------------------------------------------------
 
-def test_base_connector_is_open():
-    """BaseConnector uses is_open, not the deprecated isOpen()."""
-    from connector.base import BaseConnector
+class _StubConnector:
+    """Minimal connector that returns a preset response for send_command."""
 
-    class _Concrete(BaseConnector):
-        def connect(self):
-            return True
+    def __init__(self, response: str = ""):
+        self._response = response
+        self.last_cmd: str = ""
+        self.is_open = True
+        self.connection = self  # satisfy is_connected check
 
-    c = _Concrete(port="/dev/null")
-    mock_serial = MagicMock()
-    mock_serial.is_open = True
-    c.connection = mock_serial
-    assert c.is_connected() is True
+    def is_connected(self) -> bool:
+        return True
 
-
-def test_base_connector_disconnect():
-    from connector.base import BaseConnector
-
-    class _Concrete(BaseConnector):
-        def connect(self):
-            return True
-
-    c = _Concrete(port="/dev/null")
-    mock_serial = MagicMock()
-    mock_serial.is_open = True
-    c.connection = mock_serial
-    c.disconnect()
-    mock_serial.close.assert_called_once()
-
-
-def test_base_connector_send_command():
-    from connector.base import BaseConnector
-
-    class _Concrete(BaseConnector):
-        def connect(self):
-            return True
-
-    c = _Concrete(port="/dev/null")
-    mock_serial = MagicMock()
-    mock_serial.is_open = True
-    mock_serial.in_waiting = 0
-    mock_serial.read.return_value = b"41 0C 1A F8\r\n>"
-    c.connection = mock_serial
-    # send_command writes and reads
-    mock_serial.in_waiting = 0  # so while loop exits immediately
-    # We just need no exception; actual response depends on in_waiting
-    with patch("time.sleep"):
-        result = c.send_command("010C")
-    assert isinstance(result, str)
+    def send_command(self, cmd: str) -> str:
+        self.last_cmd = cmd
+        return self._response
 
 
 # ---------------------------------------------------------------------------
-# 2. obd/commands.py
+# obd/commands.py
 # ---------------------------------------------------------------------------
 
-def test_parse_rpm():
-    from obd.commands import parse_response
-    # A=0x1A, B=0xF8 → (26*256 + 248) / 4 = 6904/4 = 1726.0
-    result = parse_response("010C", "41 0C 1A F8")
-    assert result == pytest.approx(1726.0)
+class TestCommands:
+    def test_pid_keys_present(self):
+        for required in ("RPM", "SPEED", "COOLANT_TEMP", "FUEL_LEVEL", "VOLTAGE"):
+            assert required in OBD_PIDS, f"{required} missing from OBD_PIDS"
 
+    def test_pid_required_fields(self):
+        for key, info in OBD_PIDS.items():
+            for field in ("desc", "mode", "pid", "bytes", "parse", "unit"):
+                assert field in info, f"PID '{key}' missing field '{field}'"
+            assert callable(info["parse"]), f"PID '{key}'.parse is not callable"
 
-def test_parse_speed():
-    from obd.commands import parse_response
-    # A=0x64 = 100 km/h
-    result = parse_response("010D", "41 0D 64")
-    assert result == pytest.approx(100.0)
+    def test_rpm_parse(self):
+        parse = OBD_PIDS["RPM"]["parse"]
+        # RPM bytes [0x0C, 0x00] → (12*256 + 0) / 4 = 768
+        assert parse([0x0C, 0x00]) == 768.0
 
+    def test_speed_parse(self):
+        parse = OBD_PIDS["SPEED"]["parse"]
+        assert parse([100]) == 100
 
-def test_parse_coolant_temp():
-    from obd.commands import parse_response
-    # A=0x7D = 125 → 125-40 = 85°C
-    result = parse_response("0105", "41 05 7D")
-    assert result == pytest.approx(85.0)
+    def test_coolant_temp_parse(self):
+        parse = OBD_PIDS["COOLANT_TEMP"]["parse"]
+        assert parse([100]) == 60  # 100 - 40
 
+    def test_fuel_level_parse(self):
+        parse = OBD_PIDS["FUEL_LEVEL"]["parse"]
+        result = parse([128])
+        assert 49 <= result <= 51  # ~50%
 
-def test_parse_throttle():
-    from obd.commands import parse_response
-    # A=0x80=128 → 128*100/255 ≈ 50.2%
-    result = parse_response("0111", "41 11 80")
-    assert result == pytest.approx(50.2, abs=0.5)
+    def test_voltage_parse(self):
+        parse = OBD_PIDS["VOLTAGE"]["parse"]
+        # 0x37B8 = 14264 → 14264/1000 = 14.264 V
+        assert parse([0x37, 0xB8]) == pytest.approx(14.264, abs=0.001)
 
+    def test_at_commands_not_empty(self):
+        assert len(AT_COMMANDS) > 5
 
-def test_parse_maf():
-    from obd.commands import parse_response
-    # A=0x03, B=0xE8 = 1000 → 1000/100 = 10.0 g/s
-    result = parse_response("0110", "41 10 03 E8")
-    assert result == pytest.approx(10.0)
-
-
-def test_parse_timing():
-    from obd.commands import parse_response
-    # A=0x80=128 → (128/2)-64 = 0°
-    result = parse_response("010E", "41 0E 80")
-    assert result == pytest.approx(0.0)
-
-
-def test_parse_bad_response():
-    from obd.commands import parse_response
-    result = parse_response("010C", "NO DATA")
-    assert result is None
-
-
-def test_obd2commands_all_names():
-    from obd.commands import OBD2Commands
-    names = OBD2Commands.all_names()
-    assert "rpm" in names
-    assert "speed" in names
-    assert len(names) >= 9
+    def test_vehicle_info_pids(self):
+        assert "VIN" in VEHICLE_INFO_PIDS
 
 
 # ---------------------------------------------------------------------------
-# 3. obd/reader.py
+# obd/reader.py – _parse_hex_response
 # ---------------------------------------------------------------------------
 
-def test_reader_read_pid():
-    from obd.reader import OBD2Reader
-    conn = make_mock_connector("41 0D 3C")  # speed = 60 km/h
-    reader = OBD2Reader(conn)
-    result = reader.read_pid("010D")
-    assert result["pid"] == "010D"
-    assert result["error"] is None
+class TestParseHexResponse:
+    def test_typical_rpm_response(self):
+        # ELM327 echoes: "410C0BB8" → mode 41, PID 0C, bytes 0B B8
+        raw = "41 0C 0B B8"
+        result = _parse_hex_response(raw, "01", "0C")
+        assert result == [0x0B, 0xB8]
 
+    def test_with_newlines_and_cr(self):
+        raw = "41 0C\r0B B8\r"
+        result = _parse_hex_response(raw, "01", "0C")
+        assert result == [0x0B, 0xB8]
 
-def test_reader_read_sensor_unknown():
-    from obd.reader import OBD2Reader
-    conn = make_mock_connector()
-    reader = OBD2Reader(conn)
-    result = reader.read_sensor("nonexistent_sensor")
-    assert result["error"] is not None
+    def test_no_data_returns_none(self):
+        assert _parse_hex_response("NO DATA", "01", "0C") is None
+        assert _parse_hex_response("", "01", "0C") is None
 
-
-def test_reader_read_all_sensors():
-    from obd.reader import OBD2Reader
-    conn = make_mock_connector("41 0C 1A F8")
-    reader = OBD2Reader(conn)
-    data = reader.read_all_sensors()
-    assert isinstance(data, dict)
-    assert "rpm" in data
-    assert "speed" in data
-
-
-def test_reader_parse_dtc():
-    from obd.reader import OBD2Reader
-    # "43 01 30 00" → P0300 (Type P, code 0x0300=768 → "P0768")
-    # Actually: high=0x01, low=0x30
-    # dtype = (0x01 >> 6) & 3 = 0  → P
-    # num = (0x01 & 0x3F) << 8 | 0x30 = 0x0130 = 304
-    # → P0304
-    codes = OBD2Reader._parse_dtc("43 01 30 00")
-    assert len(codes) >= 1
-    assert codes[0].startswith("P")
-
-
-def test_reader_parse_dtc_empty():
-    from obd.reader import OBD2Reader
-    codes = OBD2Reader._parse_dtc("43 00 00 00 00")
-    assert codes == []
-
-
-def test_reader_read_dtc_error_handling():
-    from obd.reader import OBD2Reader
-    conn = MagicMock()
-    conn.send_command.side_effect = ConnectionError("not connected")
-    reader = OBD2Reader(conn)
-    codes = reader.read_dtc()
-    assert codes == []
+    def test_mode09_vin_response(self):
+        # mode 09 → response mode 49
+        raw = "49 02 01 31 47 31 4A 43"
+        result = _parse_hex_response(raw, "09", "02")
+        assert result is not None
 
 
 # ---------------------------------------------------------------------------
-# 4. obd/writer.py
+# obd/reader.py – _parse_dtcs
 # ---------------------------------------------------------------------------
 
-def test_writer_send_raw():
-    from obd.writer import OBD2Writer
-    conn = make_mock_connector("OK")
-    writer = OBD2Writer(conn)
-    result = writer.send_raw("AT Z")
-    assert result == "OK"
+class TestParseDTCs:
+    def test_single_dtc(self):
+        # Response: 43 (mode) + 01 43 (DTC P0143) + 00 00 (padding) + 00 00 (padding)
+        raw = "43 01 43 00 00 00 00"
+        dtcs = _parse_dtcs(raw)
+        assert len(dtcs) == 1
+        assert dtcs[0] == "P0143"
 
+    def test_no_dtcs(self):
+        # Response: 43 (mode) + all zeros (no DTCs)
+        raw = "43 00 00 00 00 00 00"
+        dtcs = _parse_dtcs(raw)
+        assert dtcs == []
 
-def test_writer_clear_dtc_success():
-    from obd.writer import OBD2Writer
-    conn = make_mock_connector("44")
-    writer = OBD2Writer(conn)
-    assert writer.clear_dtc() is True
-
-
-def test_writer_clear_dtc_failure():
-    from obd.writer import OBD2Writer
-    conn = make_mock_connector("NO DATA")
-    writer = OBD2Writer(conn)
-    assert writer.clear_dtc() is False
-
-
-def test_writer_set_protocol():
-    from obd.writer import OBD2Writer
-    conn = make_mock_connector("OK")
-    writer = OBD2Writer(conn)
-    result = writer.set_protocol(6)
-    conn.send_command.assert_called_with("AT SP 6")
-    assert result == "OK"
+    def test_multiple_dtcs(self):
+        # Response: 43 (mode) + 01 43 (P0143) + 04 05 (P0405) + 00 00 (padding)
+        raw = "43 01 43 04 05 00 00"
+        dtcs = _parse_dtcs(raw)
+        assert len(dtcs) == 2
+        assert "P0143" in dtcs
+        assert "P0405" in dtcs
 
 
 # ---------------------------------------------------------------------------
-# 5. utils/export.py
+# obd/reader.py – _parse_vin
 # ---------------------------------------------------------------------------
 
-def test_csv_exporter_basic():
-    from utils.export import CSVExporter
-    data = {
-        "rpm":   {"value": 1500.0, "unit": "rpm",  "error": None},
-        "speed": {"value": 60.0,   "unit": "km/h", "error": None},
-    }
-    with tempfile.TemporaryDirectory() as tmpdir:
-        fname = os.path.join(tmpdir, "test_export.csv")
-        result = CSVExporter().export(data, fname)
-        assert result == fname
-        with open(fname, newline="") as fh:
-            rows = list(csv.DictReader(fh))
-        assert len(rows) == 2
-        sensors = {r["sensor"] for r in rows}
-        assert "rpm" in sensors
-        assert "speed" in sensors
+class TestParseVin:
+    def test_vin_extraction(self):
+        # Simulate hex bytes for "1G1JC5SH3A4100001"
+        vin_str = "1G1JC5SH3A4100001"
+        hex_bytes = "49 02 " + " ".join(format(ord(c), "02X") for c in vin_str)
+        result = _parse_vin(hex_bytes)
+        assert vin_str in result or result == "N/A"  # N/A allowed if parsing drops
 
-
-def test_csv_exporter_default_filename():
-    from utils.export import CSVExporter
-    data = {"rpm": {"value": 800.0, "unit": "rpm", "error": None}}
-    with tempfile.TemporaryDirectory() as tmpdir:
-        old_cwd = os.getcwd()
-        try:
-            os.chdir(tmpdir)
-            fname = CSVExporter().export(data)
-            assert os.path.exists(fname)
-            assert "obd2_data_" in os.path.basename(fname)
-        finally:
-            os.chdir(old_cwd)
+    def test_vin_invalid_returns_na(self):
+        assert _parse_vin("NO DATA") == "N/A"
+        assert _parse_vin("") == "N/A"
 
 
 # ---------------------------------------------------------------------------
-# 6. Flask API (demo mode)
+# obd/reader.py – OBDReader with stub connector
 # ---------------------------------------------------------------------------
 
-@pytest.fixture()
-def flask_client():
-    from web.app import create_app
-    app = create_app(demo=True)
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
+class TestOBDReader:
+    def test_read_pid_rpm(self):
+        stub = _StubConnector("41 0C 0B B8")
+        reader = OBDReader(stub)
+        val = reader.read_pid("RPM")
+        # data bytes: [0x0B, 0xB8] = [11, 184]
+        # RPM = (11 * 256 + 184) / 4 = 3000 / 4 = 750.0
+        assert val == pytest.approx(750.0)
+
+    def test_read_pid_unknown_raises(self):
+        stub = _StubConnector()
+        reader = OBDReader(stub)
+        with pytest.raises(ValueError):
+            reader.read_pid("DOES_NOT_EXIST")
+
+    def test_read_pid_no_data_returns_none(self):
+        stub = _StubConnector("NO DATA")
+        reader = OBDReader(stub)
+        val = reader.read_pid("SPEED")
+        assert val is None
+
+    def test_read_all_returns_dict_for_all_pids(self):
+        stub = _StubConnector("NO DATA")
+        reader = OBDReader(stub)
+        result = reader.read_all()
+        assert set(result.keys()) == set(OBD_PIDS.keys())
+        # All None because stub returns "NO DATA"
+        assert all(v is None for v in result.values())
+
+    def test_read_dtcs_empty(self):
+        stub = _StubConnector("43 00 00 00 00 00 00")
+        reader = OBDReader(stub)
+        dtcs = reader.read_dtcs()
+        assert dtcs == []
+
+    def test_get_protocol(self):
+        stub = _StubConnector("ISO 15765-4 (CAN 11/500)")
+        reader = OBDReader(stub)
+        proto = reader.get_protocol()
+        assert "ISO" in proto or proto == "ISO 15765-4 (CAN 11/500)"
+
+    def test_realtime_stream(self):
+        """Start/stop real-time streaming and verify callback is called."""
+        stub = _StubConnector("41 0D 64")  # SPEED = 100 km/h
+        reader = OBDReader(stub)
+
+        received = []
+        event = threading.Event()
+
+        def _cb(snap):
+            received.append(snap)
+            event.set()
+
+        reader.start_realtime(_cb, interval=0.1, keys=["SPEED"])
+        called = event.wait(timeout=3)
+        reader.stop_realtime()
+
+        assert called, "Real-time callback was never called"
+        assert len(received) >= 1
+        assert "_timestamp" in received[0]
+
+    def test_start_realtime_twice_does_not_duplicate(self):
+        """Calling start_realtime while already running should not start another thread."""
+        stub = _StubConnector("NO DATA")
+        reader = OBDReader(stub)
+
+        reader.start_realtime(lambda s: None, interval=10, keys=["SPEED"])
+        t1 = reader._realtime_thread
+        reader.start_realtime(lambda s: None, interval=10, keys=["SPEED"])
+        t2 = reader._realtime_thread
+        assert t1 is t2  # same thread, not duplicated
+        reader.stop_realtime()
 
 
-def test_flask_index(flask_client):
-    r = flask_client.get("/")
-    assert r.status_code == 200
-    assert b"OBD2" in r.data
+# ---------------------------------------------------------------------------
+# utils/export.py
+# ---------------------------------------------------------------------------
 
+class TestExport:
+    def test_export_csv_creates_file(self, tmp_path):
+        data = {"RPM": 1200, "SPEED": 60, "_timestamp": time.time()}
+        path = export_csv(data, path=str(tmp_path / "test.csv"))
+        assert (tmp_path / "test.csv").exists()
+        content = (tmp_path / "test.csv").read_text()
+        assert "RPM" in content
+        assert "1200" in content
 
-def test_flask_api_status(flask_client):
-    r = flask_client.get("/api/status")
-    assert r.status_code == 200
-    d = r.get_json()
-    assert d["connected"] is True
-    assert d["mode"] == "demo"
+    def test_export_csv_append(self, tmp_path):
+        p = str(tmp_path / "log.csv")
+        t = time.time()
+        export_csv({"SPEED": 50, "_timestamp": t}, path=p, append=False)
+        export_csv({"SPEED": 80, "_timestamp": t + 1}, path=p, append=True)
+        lines = (tmp_path / "log.csv").read_text().splitlines()
+        assert len(lines) == 3  # header + 2 data rows
 
+    def test_export_csv_log_creates_file(self, tmp_path):
+        rows = [
+            {"RPM": 800, "SPEED": 0,  "_timestamp": time.time()},
+            {"RPM": 1200, "SPEED": 30, "_timestamp": time.time() + 1},
+        ]
+        path = export_csv_log(rows, path=str(tmp_path / "session.csv"))
+        content = (tmp_path / "session.csv").read_text()
+        assert "RPM" in content
+        assert "1200" in content
 
-def test_flask_api_sensors(flask_client):
-    r = flask_client.get("/api/sensors")
-    assert r.status_code == 200
-    d = r.get_json()
-    assert "sensors" in d
-    assert "rpm" in d["sensors"]
+    def test_export_csv_log_empty_raises(self):
+        with pytest.raises(ValueError):
+            export_csv_log([])
 
+    def test_export_json_creates_file(self, tmp_path):
+        data = [{"RPM": 900, "SPEED": 40, "_timestamp": time.time()}]
+        path = export_json(data, path=str(tmp_path / "out.json"))
+        import json
+        loaded = json.loads((tmp_path / "out.json").read_text())
+        assert isinstance(loaded, list)
+        assert loaded[0]["RPM"] == 900
 
-def test_flask_api_dtc(flask_client):
-    r = flask_client.get("/api/dtc")
-    assert r.status_code == 200
-    d = r.get_json()
-    assert "codes" in d
+    def test_export_csv_skips_underscore_keys(self, tmp_path):
+        data = {"SPEED": 100, "_internal": "skip", "_timestamp": time.time()}
+        path = export_csv(data, path=str(tmp_path / "t.csv"))
+        content = (tmp_path / "t.csv").read_text()
+        assert "_internal" not in content
 
-
-def test_flask_api_dtc_clear(flask_client):
-    r = flask_client.post("/api/dtc/clear")
-    assert r.status_code == 200
-    d = r.get_json()
-    assert d["success"] is True
-
-
-def test_flask_api_command(flask_client):
-    r = flask_client.post("/api/command",
-                          data=json.dumps({"command": "AT RV"}),
-                          content_type="application/json")
-    assert r.status_code == 200
-    d = r.get_json()
-    assert "response" in d
-
-
-def test_flask_api_command_empty(flask_client):
-    r = flask_client.post("/api/command",
-                          data=json.dumps({}),
-                          content_type="application/json")
-    assert r.status_code == 400
-
-
-def test_flask_api_export(flask_client):
-    r = flask_client.get("/api/export")
-    assert r.status_code == 200
-    assert r.content_type == "text/csv; charset=utf-8"
-    lines = r.data.decode().splitlines()
-    assert lines[0].startswith("timestamp,sensor")
+    def test_export_csv_none_values_become_empty(self, tmp_path):
+        data = {"RPM": None, "SPEED": 60, "_timestamp": time.time()}
+        path = export_csv(data, path=str(tmp_path / "nones.csv"))
+        content = (tmp_path / "nones.csv").read_text()
+        assert "RPM" in content

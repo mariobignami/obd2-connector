@@ -1,3 +1,3 @@
-from .export import CSVExporter
+from .export import export_csv, export_json
 
-__all__ = ["CSVExporter"]
+__all__ = ["export_csv", "export_json"]

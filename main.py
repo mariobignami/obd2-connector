@@ -1,91 +1,116 @@
 #!/usr/bin/env python3
-"""OBD2 Connector — entry point."""
+"""
+main.py – OBD2 Connector entry point.
+
+Usage examples:
+  python main.py --mode bluetooth --port /dev/rfcomm0
+  python main.py --mode serial    --port /dev/ttyUSB0
+  python main.py --mode serial    --port COM4  --interactive
+  python main.py --mode bluetooth --port COM3  --dash --interval 0.5 --log
+  python main.py list-ports
+"""
 
 import sys
+import time
+
 import click
+from rich.console import Console
+
+from connector import BluetoothConnector, SerialConnector
+from cli.interface import CLIInterface
+
+console = Console()
 
 
-@click.command()
-@click.option("--mode", type=click.Choice(["bluetooth", "serial"]),
-              default="serial", show_default=True,
-              help="Connection mode")
-@click.option("--port", default=None, help="Serial/Bluetooth port (e.g. /dev/rfcomm0 or COM3)")
-@click.option("--baudrate", default=38400, show_default=True, help="Baud rate")
-@click.option("--web",  is_flag=True, default=False, help="Start the web dashboard")
-@click.option("--web-port", default=5000, show_default=True, help="Web server port")
-@click.option("--demo", is_flag=True, default=False, help="Run in demo mode (no hardware needed)")
-@click.option("--interactive", is_flag=True, default=False, help="Start interactive CLI")
-def main(mode, port, baudrate, web, web_port, demo, interactive):
-    """OBD2 Connector — read sensor data from an ELM327 OBD2 adapter."""
+# ---------------------------------------------------------------------------
+# Shared connection factory
+# ---------------------------------------------------------------------------
 
-    connector = None
-    reader    = None
-    writer    = None
+def _build_connector(mode: str, port: str, baudrate: int, timeout: int):
+    if mode == "bluetooth":
+        return BluetoothConnector(port=port, baudrate=baudrate, timeout=timeout)
+    if mode == "serial":
+        return SerialConnector(port=port, baudrate=baudrate, timeout=timeout)
+    console.print(f"[red]Unknown mode '{mode}'. Use 'bluetooth' or 'serial'.[/]")
+    sys.exit(1)
 
-    if not demo:
-        if port is None:
-            click.echo("[ERROR] --port is required when not in --demo mode.", err=True)
-            sys.exit(1)
 
-        if mode == "bluetooth":
-            from connector.bluetooth import BluetoothConnector
-            connector = BluetoothConnector(port=port, baudrate=baudrate)
-        else:
-            from connector.serial_conn import SerialConnector
-            connector = SerialConnector(port=port, baudrate=baudrate)
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
-        connected = connector.connect()
-        if not connected:
-            click.echo("[ERROR] Failed to connect. Check port and device.", err=True)
-            sys.exit(1)
+@click.group(invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
+@click.option("--mode",      "-m", default="serial",   show_default=True,
+              type=click.Choice(["bluetooth", "serial"], case_sensitive=False),
+              help="Connection mode.")
+@click.option("--port",      "-p", default=None,       help="Serial/COM port (e.g. /dev/ttyUSB0, COM3).")
+@click.option("--baudrate",  "-b", default=38400,       show_default=True, help="Baud rate.")
+@click.option("--timeout",   "-t", default=1,           show_default=True, help="Serial timeout (seconds).")
+@click.option("--interactive", "-i", is_flag=True,      help="Start interactive REPL after connecting.")
+@click.option("--dash",          is_flag=True,          help="Launch live dashboard immediately.")
+@click.option("--interval",  default=1.0, show_default=True, help="Dashboard refresh interval (seconds).")
+@click.option("--log",           is_flag=True,          help="Log dashboard data to CSV automatically.")
+@click.option("--scan",          is_flag=True,          help="Run a single sensor scan and exit.")
+@click.option("--info",          is_flag=True,          help="Show vehicle info (VIN, ECU, …) and exit.")
+@click.option("--dtc",           is_flag=True,          help="Show stored DTCs and exit.")
+@click.pass_context
+def cli(ctx, mode, port, baudrate, timeout, interactive, dash, interval, log, scan, info, dtc):
+    """🚗 OBD2 Connector – Python ELM327 diagnostic tool."""
 
-        from obd.reader import OBD2Reader
-        from obd.writer import OBD2Writer
-        reader = OBD2Reader(connector)
-        writer = OBD2Writer(connector)
-
-    # ── Web dashboard ────────────────────────────────────────────────────
-    if web:
-        from web.app import create_app
-        app = create_app(connector=connector, reader=reader, writer=writer, demo=demo)
-        click.echo(f"[OBD2] Starting web dashboard on http://localhost:{web_port}")
-        if demo:
-            click.echo("[OBD2] Running in DEMO MODE — no hardware required.")
-        app.run(host="0.0.0.0", port=web_port, threaded=True)
+    # If a sub-command is being invoked (e.g. list-ports) skip the rest
+    if ctx.invoked_subcommand is not None:
         return
 
-    # ── Interactive CLI ──────────────────────────────────────────────────
-    if interactive:
-        if demo:
-            click.echo("[WARN] --interactive requires a real connection; --demo ignored.", err=True)
-            sys.exit(1)
-        from cli.interface import CLIInterface
-        cli = CLIInterface(connector=connector, reader=reader, writer=writer)
-        cli.run()
-        return
+    if port is None:
+        console.print("[red]Error: --port is required. Use 'list-ports' to discover available ports.[/]")
+        console.print("  Example: python main.py --mode serial --port /dev/ttyUSB0")
+        sys.exit(1)
 
-    # ── One-shot scan ────────────────────────────────────────────────────
-    if demo:
-        click.echo("[OBD2] Demo mode: use --web or --interactive with a real device.")
-        sys.exit(0)
+    connector = _build_connector(mode, port, baudrate, timeout)
 
-    click.echo("[OBD2] Running one-shot sensor scan…")
-    data = reader.read_all_sensors()
-    click.echo(f"{'Sensor':<18} {'Value':>10}  Unit")
-    click.echo("-" * 36)
-    for name, info in data.items():
-        v = info.get("value")
-        v_str = f"{v:.2f}" if isinstance(v, float) else str(v)
-        unit  = info.get("unit", "")
-        err   = info.get("error")
-        if err:
-            click.echo(f"{name:<18} {'ERROR':>10}  {err}")
+    console.print(f"[cyan]Connecting via [bold]{mode}[/bold] on [bold]{port}[/bold]…[/]")
+    if not connector.connect():
+        console.print("[red]Failed to connect. Check the port and adapter.[/]")
+        sys.exit(1)
+
+    try:
+        cli_iface = CLIInterface(connector)
+
+        if info:
+            cli_iface.show_vehicle_info()
+        elif dtc:
+            cli_iface.show_dtcs()
+        elif scan:
+            cli_iface.scan_all()
+        elif dash:
+            cli_iface.run_dashboard(interval=interval, log_csv=log)
+        elif interactive:
+            cli_iface.run_interactive()
         else:
-            click.echo(f"{name:<18} {v_str:>10}  {unit}")
+            # Default: run interactive
+            cli_iface.run_interactive()
 
-    if connector:
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted.[/]")
+    finally:
         connector.disconnect()
+        console.print("[dim]Connection closed.[/]")
+
+
+@cli.command("list-ports")
+def list_ports():
+    """List all available serial/USB and detected Bluetooth ports."""
+    from connector.serial_conn import SerialConnector
+    from connector.bluetooth import BluetoothConnector
+    console.print("[bold]Available serial ports:[/]")
+    ports = SerialConnector.list_serial_ports()
+    if not ports:
+        console.print("  [dim](none found)[/]")
+    console.print("\n[bold]Likely Bluetooth ports:[/]")
+    bt = BluetoothConnector.list_bluetooth_ports()
+    if not bt:
+        console.print("  [dim](none detected automatically)[/]")
 
 
 if __name__ == "__main__":
-    main()
+    cli()

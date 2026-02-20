@@ -1,132 +1,364 @@
-"""OBD2 PID definitions, AT commands, and response parsing."""
+"""
+OBD2 PID definitions and AT command constants.
+
+Each PID entry is a dict with:
+  - desc    : human-readable description
+  - mode    : OBD mode (01 = live data, 09 = vehicle info, …)
+  - pid     : 2-hex-digit PID byte
+  - bytes   : number of data bytes in the response
+  - parse   : callable(bytes_list) -> numeric value
+  - unit    : display unit string
+  - min/max : expected value range (used for alert thresholds)
+"""
+
+from typing import Callable, Dict, Any
 
 # ---------------------------------------------------------------------------
-# Parse helpers
+# Helper parsers
 # ---------------------------------------------------------------------------
 
-def _rpm(a, b):
-    return ((a * 256) + b) / 4.0
-
-def _speed(a, _b=None):
-    return float(a)
-
-def _temp(a, _b=None):
-    return float(a - 40)
-
-def _percent(a, _b=None):
-    return round(a * 100.0 / 255.0, 1)
-
-def _maf(a, b):
-    return ((a * 256) + b) / 100.0
-
-def _timing(a, _b=None):
-    return (a / 2.0) - 64.0
+def _a(b):                 return b[0]
+def _ab(b):                return (b[0] * 256 + b[1])
+def _rpm(b):               return (b[0] * 256 + b[1]) / 4
+def _temp(b):              return b[0] - 40
+def _percent_a(b):         return round(b[0] * 100 / 255, 1)
+def _percent_ab(b):        return round((b[0] * 256 + b[1]) * 100 / 65535, 1)
+def _maf(b):               return round((b[0] * 256 + b[1]) / 100, 2)
+def _timing(b):            return b[0] / 2 - 64
+def _voltage(b):           return round((b[0] * 256 + b[1]) / 1000, 3)
+def _fuel_rate(b):         return round((b[0] * 256 + b[1]) * 0.05, 2)
+def _short_fuel_trim(b):   return round((b[0] - 128) * 100 / 128, 1)
+def _long_fuel_trim(b):    return round((b[0] - 128) * 100 / 128, 1)
+def _equiv_ratio(b):       return round((b[0] * 256 + b[1]) * 0.0000305, 4)
+def _evap_pressure(b):     # signed 16-bit, Pa
+    val = b[0] * 256 + b[1]
+    if val >= 32768:
+        val -= 65536
+    return round(val / 4, 2)
 
 
 # ---------------------------------------------------------------------------
-# Sensor PID table
-# name → (pid_hex, description, unit, parse_fn)
+# PID table  (Mode 01 – live data)
 # ---------------------------------------------------------------------------
 
-SENSOR_PIDS = {
-    "rpm":          ("010C", "Engine RPM",            "rpm",  _rpm),
-    "speed":        ("010D", "Vehicle Speed",          "km/h", _speed),
-    "coolant_temp": ("0105", "Coolant Temperature",    "°C",   _temp),
-    "throttle":     ("0111", "Throttle Position",      "%",    _percent),
-    "engine_load":  ("0104", "Engine Load",            "%",    _percent),
-    "fuel_level":   ("012F", "Fuel Level",             "%",    _percent),
-    "intake_temp":  ("010F", "Intake Air Temperature", "°C",   _temp),
-    "maf":          ("0110", "Mass Air Flow",          "g/s",  _maf),
-    "timing":       ("010E", "Timing Advance",         "°",    _timing),
+OBD_PIDS: Dict[str, Dict[str, Any]] = {
+    # --- Engine ---
+    "RPM": {
+        "desc": "Engine RPM",
+        "mode": "01",
+        "pid": "0C",
+        "bytes": 2,
+        "parse": _rpm,
+        "unit": "rpm",
+        "min": 0,
+        "max": 8000,
+        "alert_high": 6500,
+    },
+    "SPEED": {
+        "desc": "Vehicle Speed",
+        "mode": "01",
+        "pid": "0D",
+        "bytes": 1,
+        "parse": _a,
+        "unit": "km/h",
+        "min": 0,
+        "max": 280,
+        "alert_high": 200,
+    },
+    "COOLANT_TEMP": {
+        "desc": "Engine Coolant Temperature",
+        "mode": "01",
+        "pid": "05",
+        "bytes": 1,
+        "parse": _temp,
+        "unit": "°C",
+        "min": -40,
+        "max": 215,
+        "alert_high": 105,
+    },
+    "ENGINE_LOAD": {
+        "desc": "Calculated Engine Load",
+        "mode": "01",
+        "pid": "04",
+        "bytes": 1,
+        "parse": _percent_a,
+        "unit": "%",
+        "min": 0,
+        "max": 100,
+        "alert_high": 95,
+    },
+    "THROTTLE": {
+        "desc": "Throttle Position",
+        "mode": "01",
+        "pid": "11",
+        "bytes": 1,
+        "parse": _percent_a,
+        "unit": "%",
+        "min": 0,
+        "max": 100,
+    },
+    "MAF": {
+        "desc": "Mass Air Flow Rate",
+        "mode": "01",
+        "pid": "10",
+        "bytes": 2,
+        "parse": _maf,
+        "unit": "g/s",
+        "min": 0,
+        "max": 655,
+    },
+    "INTAKE_TEMP": {
+        "desc": "Intake Air Temperature",
+        "mode": "01",
+        "pid": "0F",
+        "bytes": 1,
+        "parse": _temp,
+        "unit": "°C",
+        "min": -40,
+        "max": 215,
+        "alert_high": 60,
+    },
+    "MAP": {
+        "desc": "Intake Manifold Absolute Pressure",
+        "mode": "01",
+        "pid": "0B",
+        "bytes": 1,
+        "parse": _a,
+        "unit": "kPa",
+        "min": 0,
+        "max": 255,
+    },
+    "TIMING_ADVANCE": {
+        "desc": "Timing Advance",
+        "mode": "01",
+        "pid": "0E",
+        "bytes": 1,
+        "parse": _timing,
+        "unit": "° before TDC",
+        "min": -64,
+        "max": 63.5,
+    },
+    "OIL_TEMP": {
+        "desc": "Engine Oil Temperature",
+        "mode": "01",
+        "pid": "5C",
+        "bytes": 1,
+        "parse": _temp,
+        "unit": "°C",
+        "min": -40,
+        "max": 215,
+        "alert_high": 130,
+    },
+    # --- Fuel ---
+    "FUEL_LEVEL": {
+        "desc": "Fuel Tank Level",
+        "mode": "01",
+        "pid": "2F",
+        "bytes": 1,
+        "parse": _percent_a,
+        "unit": "%",
+        "min": 0,
+        "max": 100,
+        "alert_low": 10,
+    },
+    "FUEL_RATE": {
+        "desc": "Engine Fuel Rate",
+        "mode": "01",
+        "pid": "5E",
+        "bytes": 2,
+        "parse": _fuel_rate,
+        "unit": "L/h",
+        "min": 0,
+        "max": 3276.75,
+    },
+    "SHORT_FUEL_TRIM_1": {
+        "desc": "Short Term Fuel Trim (Bank 1)",
+        "mode": "01",
+        "pid": "06",
+        "bytes": 1,
+        "parse": _short_fuel_trim,
+        "unit": "%",
+        "min": -100,
+        "max": 99.2,
+    },
+    "LONG_FUEL_TRIM_1": {
+        "desc": "Long Term Fuel Trim (Bank 1)",
+        "mode": "01",
+        "pid": "07",
+        "bytes": 1,
+        "parse": _long_fuel_trim,
+        "unit": "%",
+        "min": -100,
+        "max": 99.2,
+    },
+    # --- Electrical ---
+    "VOLTAGE": {
+        "desc": "Control Module Voltage",
+        "mode": "01",
+        "pid": "42",
+        "bytes": 2,
+        "parse": _voltage,
+        "unit": "V",
+        "min": 0,
+        "max": 65.535,
+        "alert_low": 11.5,
+    },
+    # --- Atmosphere ---
+    "BARO_PRESSURE": {
+        "desc": "Barometric Pressure",
+        "mode": "01",
+        "pid": "33",
+        "bytes": 1,
+        "parse": _a,
+        "unit": "kPa",
+        "min": 0,
+        "max": 255,
+    },
+    "AMBIENT_TEMP": {
+        "desc": "Ambient Air Temperature",
+        "mode": "01",
+        "pid": "46",
+        "bytes": 1,
+        "parse": _temp,
+        "unit": "°C",
+        "min": -40,
+        "max": 215,
+    },
+    # --- Trip / Run-time ---
+    "RUNTIME": {
+        "desc": "Engine Run Time",
+        "mode": "01",
+        "pid": "1F",
+        "bytes": 2,
+        "parse": _ab,
+        "unit": "s",
+        "min": 0,
+        "max": 65535,
+    },
+    "DISTANCE_MIL": {
+        "desc": "Distance Traveled with MIL On",
+        "mode": "01",
+        "pid": "21",
+        "bytes": 2,
+        "parse": _ab,
+        "unit": "km",
+        "min": 0,
+        "max": 65535,
+    },
+    "DISTANCE_SINCE_CLR": {
+        "desc": "Distance Since DTCs Cleared",
+        "mode": "01",
+        "pid": "31",
+        "bytes": 2,
+        "parse": _ab,
+        "unit": "km",
+        "min": 0,
+        "max": 65535,
+    },
+    "WARMUPS_SINCE_CLR": {
+        "desc": "Warm-ups Since DTCs Cleared",
+        "mode": "01",
+        "pid": "30",
+        "bytes": 1,
+        "parse": _a,
+        "unit": "count",
+        "min": 0,
+        "max": 255,
+    },
+    "ABS_LOAD": {
+        "desc": "Absolute Load Value (volumetric efficiency)",
+        "mode": "01",
+        "pid": "43",
+        "bytes": 2,
+        "parse": _percent_ab,
+        "unit": "%",
+        "min": 0,
+        "max": 100,
+    },
+    "EVAP_PRESSURE": {
+        "desc": "Evap System Vapor Pressure",
+        "mode": "01",
+        "pid": "32",
+        "bytes": 2,
+        "parse": _evap_pressure,
+        "unit": "Pa",
+        "min": -8192,
+        "max": 8192,
+    },
 }
 
 # ---------------------------------------------------------------------------
-# AT commands for ELM327 initialisation
+# Mode 09 – Vehicle information PIDs
+# ---------------------------------------------------------------------------
+
+VEHICLE_INFO_PIDS: Dict[str, Dict[str, Any]] = {
+    "VIN": {
+        "desc": "Vehicle Identification Number",
+        "mode": "09",
+        "pid": "02",
+    },
+    "ECU_NAME": {
+        "desc": "ECU Name",
+        "mode": "09",
+        "pid": "0A",
+    },
+    "CALIBRATION_ID": {
+        "desc": "Calibration ID",
+        "mode": "09",
+        "pid": "04",
+    },
+}
+
+# ---------------------------------------------------------------------------
+# AT command constants
 # ---------------------------------------------------------------------------
 
 AT_COMMANDS = {
-    "reset":          "AT Z",
-    "echo_off":       "AT E0",
-    "linefeeds_off":  "AT L0",
-    "headers_off":    "AT H0",
-    "auto_protocol":  "AT SP 0",
-    "describe_proto": "AT DP",
-    "read_voltage":   "AT RV",
+    "RESET": "AT Z",
+    "ECHO_OFF": "AT E0",
+    "ECHO_ON": "AT E1",
+    "LINEFEEDS_OFF": "AT L0",
+    "LINEFEEDS_ON": "AT L1",
+    "HEADERS_OFF": "AT H0",
+    "HEADERS_ON": "AT H1",
+    "AUTO_PROTOCOL": "AT SP 0",
+    "PROTOCOL_CAN": "AT SP 6",
+    "DESCRIBE_PROTOCOL": "AT DP",
+    "DESCRIBE_PROTOCOL_NUM": "AT DPN",
+    "VOLTAGE": "AT RV",
+    "DEVICE_DESCRIPTION": "AT @1",
+    "DEVICE_ID": "AT @2",
+    "VERSION": "AT I",
+    "SPACES_OFF": "AT S0",
+    "SPACES_ON": "AT S1",
+    "ALLOW_LONG": "AT AL",
+    "ADAPTIVE_TIMING_OFF": "AT AT0",
+    "ADAPTIVE_TIMING_1": "AT AT1",
+    "ADAPTIVE_TIMING_2": "AT AT2",
+    "SLOW_INIT": "AT SI",
+    "FAST_INIT": "AT FI",
+    "WAKEUP_MSG_OFF": "AT WM",
 }
 
-
 # ---------------------------------------------------------------------------
-# Public parse_response function
+# DTC prefix lookup (first character of DTC code)
 # ---------------------------------------------------------------------------
 
-def _hex_bytes(raw: str) -> list:
-    """Return a list of integer byte values from a hex response string."""
-    clean = raw.replace("\r", " ").replace("\n", " ").replace(">", "").strip()
-    tokens = clean.split()
-    return [int(t, 16) for t in tokens if len(t) == 2 and all(c in "0123456789abcdefABCDEF" for c in t)]
-
-
-def parse_response(pid: str, raw: str):
-    """Parse a raw hex OBD2 response string into a numeric value.
-
-    Parameters
-    ----------
-    pid:
-        The 4-character PID string used in the request (e.g. ``"010C"``).
-    raw:
-        The raw hex string returned by the adapter (e.g. ``"41 0C 1A F8"``).
-
-    Returns
-    -------
-    float | None
-        Parsed numeric value, or ``None`` on parse failure.
-    """
-    try:
-        bytes_list = _hex_bytes(raw)
-        if len(bytes_list) < 2:
-            return None
-
-        # Drop the echo header bytes (41 XX …)
-        # The first byte should be 0x41 (positive response to 01 mode)
-        if bytes_list[0] == 0x41:
-            bytes_list = bytes_list[2:]  # skip 41 and PID byte
-
-        if not bytes_list:
-            return None
-
-        pid_upper = pid.upper()
-
-        # Look up by the raw PID nibbles
-        pid_map = {v[0].upper(): v[3] for v in SENSOR_PIDS.values()}
-        parse_fn = pid_map.get(pid_upper)
-        if parse_fn is None:
-            return None
-
-        a = bytes_list[0]
-        b = bytes_list[1] if len(bytes_list) > 1 else 0
-        return parse_fn(a, b)
-    except Exception:
-        return None
-
-
-class OBD2Commands:
-    """Namespace exposing PID and AT command data."""
-
-    SENSOR_PIDS = SENSOR_PIDS
-    AT_COMMANDS = AT_COMMANDS
-
-    @staticmethod
-    def parse_response(pid: str, raw: str):
-        return parse_response(pid, raw)
-
-    @staticmethod
-    def get_pid(name: str):
-        """Return (pid_hex, description, unit) for a sensor name or None."""
-        entry = SENSOR_PIDS.get(name)
-        if entry:
-            return entry[0], entry[1], entry[2]
-        return None
-
-    @staticmethod
-    def all_names():
-        return list(SENSOR_PIDS.keys())
+DTC_PREFIXES = {
+    "0": "P0 – Powertrain (generic)",
+    "1": "P1 – Powertrain (manufacturer)",
+    "2": "P2 – Powertrain (generic)",
+    "3": "P3 – Powertrain (manufacturer)",
+    "4": "C0 – Chassis (generic)",
+    "5": "C1 – Chassis (manufacturer)",
+    "6": "C2 – Chassis (manufacturer)",
+    "7": "C3 – Chassis (manufacturer)",
+    "8": "B0 – Body (generic)",
+    "9": "B1 – Body (manufacturer)",
+    "A": "B2 – Body (manufacturer)",
+    "B": "B3 – Body (manufacturer)",
+    "C": "U0 – Network (generic)",
+    "D": "U1 – Network (manufacturer)",
+    "E": "U2 – Network (manufacturer)",
+    "F": "U3 – Network (manufacturer)",
+}
