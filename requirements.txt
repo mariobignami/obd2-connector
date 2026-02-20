@@ -1,0 +1,4 @@
+pyserial>=3.5
+obd>=0.7.1
+rich>=13.0.0
+click>=8.1.0
