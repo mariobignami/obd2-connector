@@ -1,5 +1,7 @@
 """OBD2Writer — low-level command sending and DTC clearing."""
 
+import time
+
 from .commands import AT_COMMANDS
 
 
@@ -42,7 +44,7 @@ class OBD2Writer:
         """Run the standard ELM327 initialization sequence."""
         try:
             self.send_raw(AT_COMMANDS["reset"])
-            import time; time.sleep(1)
+            time.sleep(1)
             self.send_raw(AT_COMMANDS["echo_off"])
             self.send_raw(AT_COMMANDS["linefeeds_off"])
             self.send_raw(AT_COMMANDS["headers_off"])

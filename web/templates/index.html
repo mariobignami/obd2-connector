@@ -539,9 +539,9 @@ function showToast(msg, isErr=false) {
 initGauges();
 updateStatus();
 scanAll();
-const STREAM_START_DELAY_MS = 600; // brief delay to let initial scan complete before streaming
+const streamStartDelayMs = 600; // brief delay to let initial scan complete before streaming
 // Auto-start live stream
-setTimeout(toggleStream, STREAM_START_DELAY_MS);
+setTimeout(toggleStream, streamStartDelayMs);
 </script>
 </body>
 </html>
