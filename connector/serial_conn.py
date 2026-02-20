@@ -18,7 +18,7 @@ class SerialConnector(BaseConnector):
                 timeout=self.timeout
             )
             time.sleep(2)
-            if self.connection.isOpen():
+            if self.connection.is_open:
                 print(f"[USB] Connected successfully on {self.port}")
                 self.initialize()
                 return True
