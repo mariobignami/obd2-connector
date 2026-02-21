@@ -1,6 +1,9 @@
+import logging
 import serial
 import time
 from .base import BaseConnector
+
+logger = logging.getLogger(__name__)
 
 
 class SerialConnector(BaseConnector):
@@ -11,7 +14,7 @@ class SerialConnector(BaseConnector):
 
     def connect(self) -> bool:
         try:
-            print(f"[USB] Connecting to Serial OBD2 on port {self.port}...")
+            logger.info("[USB] Connecting to Serial OBD2 on port %s…", self.port)
             self.connection = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
@@ -19,12 +22,12 @@ class SerialConnector(BaseConnector):
             )
             time.sleep(2)
             if self.connection.is_open:
-                print(f"[USB] Connected successfully on {self.port}")
+                logger.info("[USB] Connected successfully on %s", self.port)
                 self.initialize()
                 return True
             return False
         except serial.SerialException as e:
-            print(f"[USB][ERROR] Could not connect: {e}")
+            logger.error("[USB][ERROR] Could not connect: %s", e)
             return False
 
     @staticmethod
@@ -34,9 +37,5 @@ class SerialConnector(BaseConnector):
         ports = serial.tools.list_ports.comports()
         available = [p.device for p in ports]
         if not available:
-            print("[USB] No serial ports found.")
-        else:
-            print("[USB] Available ports:")
-            for p in available:
-                print(f"  - {p}")
+            logger.warning("[USB] No serial ports found.")
         return available

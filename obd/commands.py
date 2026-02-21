@@ -42,6 +42,17 @@ def _evap_pressure(b):     # signed 16-bit, Pa
 # ---------------------------------------------------------------------------
 
 OBD_PIDS: Dict[str, Dict[str, Any]] = {
+    # --- Status ---
+    "MIL_STATUS": {
+        "desc": "MIL / Monitor Status",
+        "mode": "01",
+        "pid": "01",
+        "bytes": 4,
+        "parse": lambda b: {"mil_on": bool(b[0] & 0x80), "dtc_count": b[0] & 0x7F},
+        "unit": "",
+        "min": 0,
+        "max": 1,
+    },
     # --- Engine ---
     "RPM": {
         "desc": "Engine RPM",

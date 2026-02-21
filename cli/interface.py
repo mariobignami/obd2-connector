@@ -34,6 +34,13 @@ from utils.export import export_csv, export_csv_log, export_json
 console = Console()
 
 # ---------------------------------------------------------------------------
+# DTC display maps (module-level for reuse)
+# ---------------------------------------------------------------------------
+
+DTC_SYSTEM_MAP = {"P": "Powertrain", "C": "Chassis", "B": "Body", "U": "Network (CAN)"}
+DTC_SUBTYPE_MAP = {"0": "Generic", "2": "Generic", "1": "Manufacturer", "3": "Manufacturer"}
+
+# ---------------------------------------------------------------------------
 # Colour thresholds
 # ---------------------------------------------------------------------------
 
@@ -132,6 +139,8 @@ class CLIInterface:
         tbl.add_column("Status", no_wrap=True)
 
         for key, info in OBD_PIDS.items():
+            if key == "MIL_STATUS":
+                continue
             val = snap.get(key)
             style = _value_style(key, val)
             val_str = f"{val}" if val is not None else "–"
@@ -206,6 +215,8 @@ class CLIInterface:
         tbl.add_column("Unit", style="dim")
 
         for key, info in OBD_PIDS.items():
+            if key == "MIL_STATUS":
+                continue
             val = data.get(key)
             val_str = f"{val}" if val is not None else "–"
             style = _value_style(key, val)
@@ -229,13 +240,17 @@ class CLIInterface:
             console.print(f"[green]✓ No {title} found.[/]")
             return
 
+        _system_map = DTC_SYSTEM_MAP
+        _subtype_map = DTC_SUBTYPE_MAP
+
         tbl = Table(title=title, box=box.ROUNDED, header_style="bold red")
         tbl.add_column("Code", style="bold red")
         tbl.add_column("System")
+        tbl.add_column("Type")
         for dtc in dtcs:
-            prefix_key = dtc[1] if len(dtc) > 1 else ""
-            system = DTC_PREFIXES.get(prefix_key, "Unknown system")
-            tbl.add_row(dtc, system)
+            system = _system_map.get(dtc[0], "Unknown") if dtc else "Unknown"
+            subtype = _subtype_map.get(dtc[1], "") if len(dtc) > 1 else ""
+            tbl.add_row(dtc, system, subtype)
         console.print(tbl)
 
     def clear_dtcs(self) -> None:
@@ -270,6 +285,26 @@ class CLIInterface:
         console.print(tbl)
 
     # ------------------------------------------------------------------
+    # MIL (check engine light) status
+    # ------------------------------------------------------------------
+
+    def show_mil_status(self) -> None:
+        with console.status("[cyan]Reading MIL status…[/]"):
+            status = self.reader.read_mil_status()
+
+        mil_on = status.get("mil_on")
+        dtc_count = status.get("dtc_count")
+
+        if mil_on is None:
+            console.print("[red]Could not read MIL status.[/]")
+            return
+
+        if mil_on:
+            console.print(f"[bold red]⚠  Check Engine Light is ON  ({dtc_count} DTC(s) stored)[/]")
+        else:
+            console.print(f"[bold green]✓  Check Engine Light is OFF  ({dtc_count} DTC(s) stored)[/]")
+
+    # ------------------------------------------------------------------
     # Freeze frame
     # ------------------------------------------------------------------
 
@@ -281,6 +316,8 @@ class CLIInterface:
         tbl.add_column("Unit", style="dim")
 
         for key, info in OBD_PIDS.items():
+            if key == "MIL_STATUS":
+                continue
             val = self.reader.read_freeze_frame(key, frame=frame)
             val_str = f"{val}" if val is not None else "–"
             tbl.add_row(info["desc"], val_str, info.get("unit", ""))
@@ -367,6 +404,8 @@ class CLIInterface:
                 self.show_freeze_frame(frame)
             elif cmd == "info":
                 self.show_vehicle_info()
+            elif cmd == "mil":
+                self.show_mil_status()
             elif cmd == "trip":
                 info = self._trip_summary()
                 for k, v in info.items():
@@ -407,6 +446,7 @@ class CLIInterface:
             ("dtc",               "Show stored DTCs (Mode 03)"),
             ("pending",           "Show pending DTCs (Mode 07)"),
             ("clear_dtc",         "Clear stored DTCs (Mode 04) – asks for confirmation"),
+            ("mil",               "Show MIL (check engine light) status and DTC count"),
             ("freeze [frame#]",   "Read freeze-frame data (default frame 0)"),
             ("info",              "Display vehicle info: VIN, ECU name, protocol, battery…"),
             ("trip",              "Show trip computer summary"),

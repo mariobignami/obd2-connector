@@ -227,6 +227,20 @@
   .terminal-input:focus { border-color: var(--accent2); }
   .terminal-input::placeholder { color: var(--muted); }
 
+  /* ── VEHICLE INFO TABLE ──────────────────────────── */
+  #vehicle-info-table td {
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  #vehicle-info-table td:first-child {
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: 180px;
+  }
+
   /* ── FOOTER ──────────────────────────────────────── */
   footer {
     text-align: center;
@@ -274,8 +288,10 @@
   <button class="btn btn-primary" onclick="scanAll()">⟳ Scan All</button>
   <button class="btn" onclick="readDTC()">⚠ Read DTCs</button>
   <button class="btn btn-danger" onclick="clearDTC()">✕ Clear DTCs</button>
+  <button class="btn" onclick="loadVehicleInfo()">🚗 Vehicle Info</button>
   <button class="btn" onclick="exportCSV()">↓ Export CSV</button>
   <button class="btn" id="stream-btn" onclick="toggleStream()">▶ Live Stream</button>
+  <span id="mil-badge" style="display:none;padding:7px 16px;border-radius:6px;font-size:0.82rem;font-weight:700;"></span>
 </div>
 
 <!-- ── MAIN ───────────────────────────────────────────── -->
@@ -291,6 +307,13 @@
     <div class="dtc-list" id="dtc-list">
       <span class="dtc-clear">No codes read yet — click "Read DTCs"</span>
     </div>
+  </div>
+
+  <!-- Vehicle Info -->
+  <div class="dtc-section" id="vehicle-info-section" style="display:none;">
+    <p class="section-title">Vehicle Information</p>
+    <table id="vehicle-info-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+    </table>
   </div>
 
   <!-- Terminal -->
@@ -321,6 +344,8 @@ const GAUGES = [
   { key:'intake_temp',  label:'Intake Air Temp',min:0, max:80,    warnAt:50,   dangerAt:65   },
   { key:'maf',          label:'MAF Sensor',     min:0, max:50,    warnAt:35,   dangerAt:45   },
   { key:'timing',       label:'Timing Advance', min:-20,max:60,   warnAt:50,   dangerAt:55   },
+  { key:'voltage',      label:'Battery Voltage',min:8, max:16,    warnAt:11.5, dangerAt:10.5 },
+  { key:'oil_temp',     label:'Oil Temp',       min:40,max:150,   warnAt:120,  dangerAt:135  },
 ];
 
 // Arc geometry: half-circle, cx=70, cy=70, r=55, from 180° to 0° (left→right)
@@ -384,6 +409,45 @@ function updateGauge(g, value, unit) {
   const disp = typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(1)) : value;
   valEl.textContent = disp;
   unitEl.textContent = unit || '';
+}
+
+// ── VEHICLE INFO ───────────────────────────────────────────────
+async function loadVehicleInfo() {
+  const section = document.getElementById('vehicle-info-section');
+  const tbl = document.getElementById('vehicle-info-table');
+  tbl.innerHTML = '<tr><td colspan="2" style="color:var(--muted);padding:10px">Loading…</td></tr>';
+  section.style.display = '';
+  try {
+    const r = await fetch('/api/vehicle_info');
+    const d = await r.json();
+    if (d.error) { tbl.innerHTML = `<tr><td colspan="2" style="color:var(--danger)">${d.error}</td></tr>`; return; }
+    const fields = [
+      ['VIN', d.vin], ['ECU Name', d.ecu_name], ['Calibration ID', d.calibration_id],
+      ['Protocol', d.protocol], ['ELM327 Version', d.elm_version], ['Battery Voltage', d.battery_voltage],
+    ];
+    tbl.innerHTML = fields.map(([k,v]) => `<tr><td>${k}</td><td style="font-family:'Orbitron',monospace;font-size:0.82rem;color:var(--accent2)">${v||'N/A'}</td></tr>`).join('');
+  } catch(e) { tbl.innerHTML = `<tr><td colspan="2" style="color:var(--danger)">Error: ${e}</td></tr>`; }
+}
+
+async function checkMIL() {
+  try {
+    const r = await fetch('/api/mil');
+    const d = await r.json();
+    const badge = document.getElementById('mil-badge');
+    if (d.mil_on === null || d.mil_on === undefined) { badge.style.display = 'none'; return; }
+    badge.style.display = '';
+    if (d.mil_on) {
+      badge.textContent = `⚠ CHECK ENGINE (${d.dtc_count} ${d.dtc_count === 1 ? 'Code' : 'Codes'})`;
+      badge.style.background = 'rgba(255,59,48,.18)';
+      badge.style.color = 'var(--danger)';
+      badge.style.border = '1px solid rgba(255,59,48,.5)';
+    } else {
+      badge.textContent = `✓ ENGINE OK`;
+      badge.style.background = 'rgba(0,255,136,.08)';
+      badge.style.color = 'var(--accent)';
+      badge.style.border = '1px solid rgba(0,255,136,.3)';
+    }
+  } catch(_) {}
 }
 
 // ── SENSOR DATA ────────────────────────────────────────────────
@@ -539,6 +603,7 @@ function showToast(msg, isErr=false) {
 initGauges();
 updateStatus();
 scanAll();
+checkMIL();
 const streamStartDelayMs = 600; // brief delay to let initial scan complete before streaming
 // Auto-start live stream
 setTimeout(toggleStream, streamStartDelayMs);
