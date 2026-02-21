@@ -30,12 +30,17 @@ class BaseConnector(ABC):
         if not self.is_connected():
             raise ConnectionError("Not connected to OBD2 device.")
         self.connection.write((command.strip() + "\r").encode())
-        time.sleep(0.3)
         response = b""
-        while self.connection.in_waiting:
-            response += self.connection.read(self.connection.in_waiting)
-            time.sleep(0.1)
-        return response.decode(errors="ignore").strip()
+        deadline = time.time() + self.timeout
+        while time.time() < deadline:
+            if self.connection.in_waiting:
+                chunk = self.connection.read(self.connection.in_waiting)
+                response += chunk
+                if b">" in response:
+                    break
+            else:
+                time.sleep(0.01)
+        return response.decode(errors="ignore").rstrip(">").strip()
 
     def reset(self) -> str:
         return self.send_command("AT Z")

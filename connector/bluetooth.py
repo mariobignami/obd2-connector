@@ -23,6 +23,7 @@ class BluetoothConnector(BaseConnector):
             time.sleep(2)
             if self.connection.is_open:
                 logger.info("[BT] Connected successfully on %s", self.port)
+                self.connection.reset_input_buffer()
                 self.initialize()
                 return True
             return False

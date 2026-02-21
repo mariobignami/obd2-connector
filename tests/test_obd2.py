@@ -4,6 +4,7 @@ Unit tests for OBD2 connector modules (no hardware required).
 
 import time
 import threading
+import unittest.mock as mock
 import pytest
 
 from obd.commands import OBD_PIDS, AT_COMMANDS, VEHICLE_INFO_PIDS
@@ -341,6 +342,92 @@ class TestMILStatus:
         reader = OBDReader(stub)
         result = reader.read_all()
         assert "MIL_STATUS" not in result
+
+
+# ---------------------------------------------------------------------------
+# connector/base.py – send_command (prompt-based reading)
+# ---------------------------------------------------------------------------
+
+class TestSendCommand:
+    """Test BaseConnector.send_command with a mocked serial port."""
+
+    def _make_connector_with_serial(self, response_bytes: bytes):
+        """Return a BluetoothConnector whose serial port returns the given bytes."""
+        from connector.bluetooth import BluetoothConnector
+
+        conn = BluetoothConnector.__new__(BluetoothConnector)
+        conn.timeout = 1
+
+        data = list(response_bytes)
+        pos = [0]
+
+        fake_serial = mock.MagicMock()
+        fake_serial.is_open = True
+
+        def in_waiting_side_effect():
+            return max(0, len(data) - pos[0])
+
+        def read_side_effect(n):
+            chunk = bytes(data[pos[0]:pos[0] + n])
+            pos[0] += n
+            return chunk
+
+        type(fake_serial).in_waiting = mock.PropertyMock(
+            side_effect=in_waiting_side_effect
+        )
+        fake_serial.read.side_effect = read_side_effect
+        conn.connection = fake_serial
+        return conn
+
+    def test_reads_until_prompt(self):
+        """send_command stops reading when '>' is received."""
+        conn = self._make_connector_with_serial(b"41 0C 0B B8\r\n>")
+        result = conn.send_command("010C")
+        assert "41" in result
+        assert "0C" in result
+
+    def test_returns_empty_on_timeout(self):
+        """send_command returns empty string when no data arrives within timeout."""
+        from connector.bluetooth import BluetoothConnector
+
+        conn = BluetoothConnector.__new__(BluetoothConnector)
+        conn.timeout = 0.1  # very short timeout
+
+        fake_serial = mock.MagicMock()
+        fake_serial.is_open = True
+        type(fake_serial).in_waiting = mock.PropertyMock(return_value=0)
+        conn.connection = fake_serial
+
+        result = conn.send_command("010C")
+        assert result == ""
+
+    def test_strips_prompt_from_result(self):
+        """The '>' character and surrounding whitespace are stripped from the result."""
+        conn = self._make_connector_with_serial(b"OK\r\n>")
+        result = conn.send_command("AT E0")
+        assert ">" not in result
+        assert "OK" in result
+
+
+# ---------------------------------------------------------------------------
+# web/app.py – timing_advance key alignment
+# ---------------------------------------------------------------------------
+
+class TestDemoSensorKeys:
+    def test_demo_sensors_include_timing_advance(self):
+        """Demo sensor data must use 'timing_advance' to match the live OBD reader key."""
+        from web.app import create_app
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/sensors")
+            data = r.get_json()
+            sensors = data["sensors"]
+            assert "timing_advance" in sensors, (
+                "'timing_advance' key missing – demo data and JS GAUGES must match live reader output"
+            )
+            assert "timing" not in sensors, (
+                "Old 'timing' key still present – should have been renamed to 'timing_advance'"
+            )
 
 
 # ---------------------------------------------------------------------------
