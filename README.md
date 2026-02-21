@@ -9,13 +9,14 @@ Leia sensores em tempo real, visualize um dashboard ao vivo, leia/limpe DTCs, ex
 
 | Categoria | Recurso |
 |-----------|---------|
-| 🔵 Conexão | Bluetooth (ELM327 rfcomm / COM) |
-| 🔌 Conexão | USB / Serial (ELM327 cabo) |
+| 🔵 Conexão | Bluetooth ELM327 (rfcomm / COM) |
+| 🔌 Conexão | USB / Serial ELM327 (cabo) |
+| 🌐 Web Dashboard | Interface completa no navegador com Flask (http://localhost:5000) |
 | 📊 Tempo Real | Dashboard ao vivo com todos os sensores (atualização contínua) |
 | 🗺 Computador de Bordo | Distância percorrida, velocidade média/máxima, tempo de viagem |
 | ⚠️ Alertas | Alertas visuais para temperatura alta, RPM excessivo, voltagem baixa, combustível baixo |
-| 🔧 DTCs | Leitura de falhas armazenadas (Modo 03) e pendentes (Modo 07) |
-| 🧹 Limpar DTCs | Apaga todos os códigos de falha (Modo 04) com confirmação |
+| 🔧 Ler Erros (DTC) | Leitura de falhas armazenadas (Modo 03) e pendentes (Modo 07) com descrições |
+| 🧹 Limpar Erros | Apaga todos os códigos de falha (Modo 04) — injeção, emissão, motor, etc. |
 | 🧊 Freeze Frame | Leitura de dados congelados no momento da falha (Modo 02) |
 | 🪪 Informações do Veículo | VIN, nome do ECU, ID de calibração, protocolo OBD, versão ELM327, voltagem da bateria |
 | 📡 Comandos Raw | Envia qualquer comando AT ou OBD2 diretamente |
@@ -64,6 +65,8 @@ Leia sensores em tempo real, visualize um dashboard ao vivo, leia/limpe DTCs, ex
 pyserial>=3.5
 rich>=13.0.0
 click>=8.1.0
+flask>=3.0.0
+pytest>=8.0.0
 ```
 
 ---
@@ -78,7 +81,81 @@ pip install -r requirements.txt
 
 ---
 
-## 🚀 Uso Rápido
+## 🌐 Dashboard Web (no Navegador)
+
+O OBD2 Connector inclui um **dashboard completo no navegador**, com gauges animados, leitura de erros, limpeza de DTCs e streaming ao vivo — tudo via Flask.
+
+### Iniciar em modo demo (sem hardware)
+
+```bash
+python main.py --demo --web
+```
+
+Acesse em: **http://localhost:5000**
+
+> No modo demo, sensores simulados variam em tempo real e 2 códigos de falha de exemplo são exibidos para você testar as funcionalidades.
+
+### Iniciar com ELM327 Bluetooth
+
+```bash
+# Linux (emparelhe o ELM327 e crie o rfcomm primeiro):
+sudo rfcomm bind 0 <MAC-DO-ELM327>
+python main.py --mode bluetooth --port /dev/rfcomm0 --web
+
+# Windows (use a porta COM atribuída pelo Bluetooth):
+python main.py --mode bluetooth --port COM3 --web
+```
+
+### Iniciar com ELM327 USB/Serial
+
+```bash
+# Linux
+python main.py --mode serial --port /dev/ttyUSB0 --web
+
+# Windows
+python main.py --mode serial --port COM4 --web
+```
+
+### Porta customizada para o servidor web
+
+```bash
+python main.py --demo --web --web-port 8080
+# Acesse em http://localhost:8080
+```
+
+### Funcionalidades do Dashboard Web
+
+| Botão / Função | Descrição |
+|----------------|-----------|
+| **⟳ Scan All** | Lê todos os sensores de uma vez |
+| **▶ Live Stream** | Inicia/para o streaming em tempo real via SSE |
+| **🚗 Vehicle Info** | Exibe VIN, ECU, protocolo, versão ELM327 e tensão |
+| **↓ Export CSV** | Baixa os dados atuais dos sensores em CSV |
+| **⚠ Ler Erros** | Lê os **códigos de falha armazenados (Modo 03)** com descrição — inclui erros de injeção, catalisador, emissões, etc. |
+| **📋 Pendentes** | Lê DTCs pendentes (Modo 07) — falhas detectadas mas ainda não armazenadas |
+| **✕ Limpar Erros** | Apaga **todos os DTCs armazenados (Modo 04)** — reset da luz de avaria |
+| **Terminal** | Envia qualquer comando AT ou OBD2 raw diretamente ao ELM327 |
+
+#### Seções do Dashboard
+
+- **📊 Sensores** — 18 gauges animados em arco semicircular (RPM, Velocidade, Temperatura, Combustível, MAF, etc.)
+- **🗺 Computador de Bordo** — Tempo de funcionamento, distância desde reset, aquecimentos, pressão EVAP
+- **⚠ Diagnóstico** — Códigos de falha com descrição completa em português e categoria do sistema (Powertrain, Chassis, Body, Network)
+- **🪪 Veículo** — Informações do ECU e VIN
+- **💻 Terminal** — Console raw para comandos AT/OBD2
+
+#### Como ler e limpar erros de injeção (DTC)
+
+1. Acesse o dashboard: `python main.py --web --mode bluetooth --port /dev/rfcomm0`
+2. Clique em **⚠ Ler Erros** — os códigos aparecem com descrição (ex: `P0201 – Defeito no injetor – Cilindro 1`)
+3. Para apagar, clique em **✕ Limpar Erros** e confirme
+4. Clique em qualquer código para pesquisar mais informações no Google
+
+> O MIL (luz de avaria/"check engine") é detectado automaticamente e os DTCs são lidos ao carregar a página se estiver ligado.
+
+---
+
+## 🚀 Uso Rápido (CLI)
 
 ### Descobrir portas disponíveis
 
@@ -86,7 +163,7 @@ pip install -r requirements.txt
 python main.py list-ports
 ```
 
-### Conexão Bluetooth e dashboard ao vivo
+### Conexão Bluetooth e dashboard ao vivo (terminal)
 
 ```bash
 # Linux
@@ -185,12 +262,12 @@ obd2> exit
 
 ```
 obd2-connector/
-├── main.py                  # Entry point (click CLI)
+├── main.py                  # Entry point (click CLI + web server)
 ├── connector/
 │   ├── __init__.py
 │   ├── base.py              # Classe base de conexão (serial I/O + AT init)
-│   ├── bluetooth.py         # Conexão Bluetooth (ELM327 rfcomm / COM)
-│   └── serial_conn.py       # Conexão USB/Serial (ELM327 cabo)
+│   ├── bluetooth.py         # Conexão Bluetooth ELM327 (rfcomm / COM)
+│   └── serial_conn.py       # Conexão USB/Serial ELM327 (cabo)
 ├── obd/
 │   ├── __init__.py
 │   ├── commands.py          # Tabela completa de PIDs + parsers + comandos AT
@@ -199,12 +276,17 @@ obd2-connector/
 ├── cli/
 │   ├── __init__.py
 │   └── interface.py         # Dashboard Rich ao vivo + REPL interativo
+├── web/
+│   ├── __init__.py
+│   ├── app.py               # Flask app factory (API REST + SSE streaming)
+│   └── templates/
+│       └── index.html       # Dashboard web completo (gauges, DTCs, terminal)
 ├── utils/
 │   ├── __init__.py
 │   └── export.py            # Exportação CSV e JSON
 ├── tests/
 │   ├── __init__.py
-│   └── test_obd2.py         # 33 testes unitários (sem hardware)
+│   └── test_obd2.py         # 55+ testes unitários (sem hardware)
 ├── requirements.txt
 ├── .gitignore
 └── README.md

@@ -549,3 +549,56 @@ class TestWebApp:
             assert r.status_code == 200
             d = r.get_json()
             assert d["success"] is True
+
+    def test_demo_dtc_returns_sample_codes(self):
+        """Demo mode must return sample DTC codes so users can see the feature."""
+        from web.app import create_app, _DEMO_DTCS
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/dtc")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert d["codes"] == _DEMO_DTCS
+            assert len(d["codes"]) > 0, "Demo mode should return at least one sample DTC"
+
+    def test_demo_pending_dtc(self):
+        """Demo mode /api/dtc/pending must return pending sample codes."""
+        from web.app import create_app, _DEMO_PENDING_DTCS
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/dtc/pending")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert "codes" in d
+            assert d["codes"] == _DEMO_PENDING_DTCS
+
+    def test_live_app_pending_dtc_uses_reader(self):
+        """Live mode /api/dtc/pending calls reader.read_pending_dtcs()."""
+        from web.app import create_app
+
+        class _FakeReader:
+            def read_pending_dtcs(self):
+                return ["P0300"]
+
+        app = create_app(reader=_FakeReader(), demo=False)
+        with app.test_client() as c:
+            r = c.get("/api/dtc/pending")
+            assert r.status_code == 200
+            d = r.get_json()
+            assert d["codes"] == ["P0300"]
+
+    def test_demo_sensors_all_obd_pids_present(self):
+        """Demo sensor data must include all OBD_PIDS keys (minus MIL_STATUS) as lowercase."""
+        from web.app import create_app
+        from obd.commands import OBD_PIDS
+        app = create_app(demo=True)
+        with app.test_client() as c:
+            r = c.get("/api/sensors")
+            d = r.get_json()
+            sensors = d["sensors"]
+            for key in OBD_PIDS:
+                if key == "MIL_STATUS":
+                    continue
+                assert key.lower() in sensors, (
+                    f"Demo sensor missing '{key.lower()}' – web and CLI dash must show the same sensors"
+                )
