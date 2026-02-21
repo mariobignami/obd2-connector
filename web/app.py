@@ -16,36 +16,70 @@ from flask import Flask, Response, jsonify, render_template, request, stream_wit
 _demo_tick = 0
 _demo_lock = threading.Lock()
 
+# Sample fault codes shown in demo mode so users can see the DTC feature
+_DEMO_DTCS = ["P0420", "P0171"]
+_DEMO_PENDING_DTCS = ["P0201"]
+
+# Rate of demo distance accumulation: distance increases by 1 km every N ticks
+_DEMO_DISTANCE_INCREMENT = 10
+
 
 def _demo_sensors():
-    """Return simulated sensor readings that vary over time."""
+    """Return simulated sensor readings that vary over time (all OBD_PIDS sensors)."""
     global _demo_tick
     with _demo_lock:
         _demo_tick += 1
     t = _demo_tick * 0.15
     return {
-        "rpm":          {"value": round(800 + 1350 * (1 + math.sin(t)) + random.uniform(-50, 50), 1),
-                         "unit": "rpm",   "error": None},
-        "speed":        {"value": round(max(0, 60 + 50 * math.sin(t * 0.4) + random.uniform(-3, 3)), 1),
-                         "unit": "km/h",  "error": None},
-        "coolant_temp": {"value": round(90 + 3 * math.sin(t * 0.1) + random.uniform(-0.5, 0.5), 1),
-                         "unit": "°C",    "error": None},
-        "throttle":     {"value": round(max(5, min(95, 35 + 25 * math.sin(t * 0.5) + random.uniform(-2, 2))), 1),
-                         "unit": "%",     "error": None},
-        "engine_load":  {"value": round(max(10, min(90, 40 + 20 * math.sin(t * 0.3) + random.uniform(-2, 2))), 1),
-                         "unit": "%",     "error": None},
-        "fuel_level":   {"value": max(0, 65.0 - _demo_tick * 0.01),  # ~1% per 100 ticks
-                         "unit": "%",     "error": None},
-        "intake_temp":  {"value": round(28 + 4 * math.sin(t * 0.08) + random.uniform(-0.5, 0.5), 1),
-                         "unit": "°C",    "error": None},
-        "maf":          {"value": round(max(2, 9 + 4 * math.sin(t * 0.6) + random.uniform(-0.3, 0.3)), 2),
-                         "unit": "g/s",   "error": None},
-        "timing_advance": {"value": round(12 + 6 * math.sin(t * 0.2) + random.uniform(-0.5, 0.5), 1),
-                         "unit": "°",     "error": None},
-        "voltage":      {"value": round(13.8 + 0.4 * math.sin(t * 0.05) + random.uniform(-0.05, 0.05), 2),
-                         "unit": "V",     "error": None},
-        "oil_temp":     {"value": round(95 + 5 * math.sin(t * 0.07) + random.uniform(-0.5, 0.5), 1),
-                         "unit": "°C",    "error": None},
+        # ── Core gauges ────────────────────────────────────────────────
+        "rpm":               {"value": round(800 + 1350 * (1 + math.sin(t)) + random.uniform(-50, 50), 1),
+                              "unit": "rpm",   "error": None},
+        "speed":             {"value": round(max(0, 60 + 50 * math.sin(t * 0.4) + random.uniform(-3, 3)), 1),
+                              "unit": "km/h",  "error": None},
+        "coolant_temp":      {"value": round(90 + 3 * math.sin(t * 0.1) + random.uniform(-0.5, 0.5), 1),
+                              "unit": "°C",    "error": None},
+        "throttle":          {"value": round(max(5, min(95, 35 + 25 * math.sin(t * 0.5) + random.uniform(-2, 2))), 1),
+                              "unit": "%",     "error": None},
+        "engine_load":       {"value": round(max(10, min(90, 40 + 20 * math.sin(t * 0.3) + random.uniform(-2, 2))), 1),
+                              "unit": "%",     "error": None},
+        "fuel_level":        {"value": round(max(0, 65.0 - _demo_tick * 0.01), 1),
+                              "unit": "%",     "error": None},
+        "intake_temp":       {"value": round(28 + 4 * math.sin(t * 0.08) + random.uniform(-0.5, 0.5), 1),
+                              "unit": "°C",    "error": None},
+        "maf":               {"value": round(max(2, 9 + 4 * math.sin(t * 0.6) + random.uniform(-0.3, 0.3)), 2),
+                              "unit": "g/s",   "error": None},
+        "timing_advance":    {"value": round(12 + 6 * math.sin(t * 0.2) + random.uniform(-0.5, 0.5), 1),
+                              "unit": "°",     "error": None},
+        "voltage":           {"value": round(13.8 + 0.4 * math.sin(t * 0.05) + random.uniform(-0.05, 0.05), 2),
+                              "unit": "V",     "error": None},
+        "oil_temp":          {"value": round(95 + 5 * math.sin(t * 0.07) + random.uniform(-0.5, 0.5), 1),
+                              "unit": "°C",    "error": None},
+        # ── Additional gauges (matching CLI dash) ──────────────────────
+        "map":               {"value": round(100 + 10 * math.sin(t * 0.4) + random.uniform(-1, 1), 1),
+                              "unit": "kPa",   "error": None},
+        "fuel_rate":         {"value": round(max(0.5, 5 + 3 * math.sin(t * 0.5) + random.uniform(-0.2, 0.2)), 2),
+                              "unit": "L/h",   "error": None},
+        "short_fuel_trim_1": {"value": round(random.uniform(-5, 5), 1),
+                              "unit": "%",     "error": None},
+        "long_fuel_trim_1":  {"value": round(1.5 + 0.5 * math.sin(t * 0.02), 1),
+                              "unit": "%",     "error": None},
+        "baro_pressure":     {"value": round(101 + 0.5 * math.sin(t * 0.01), 1),
+                              "unit": "kPa",   "error": None},
+        "ambient_temp":      {"value": round(25 + 2 * math.sin(t * 0.005), 1),
+                              "unit": "°C",    "error": None},
+        "abs_load":          {"value": round(max(10, min(90, 42 + 18 * math.sin(t * 0.3) + random.uniform(-2, 2))), 1),
+                              "unit": "%",     "error": None},
+        # ── Trip / statistics ──────────────────────────────────────────
+        "runtime":           {"value": _demo_tick,
+                              "unit": "s",     "error": None},
+        "distance_mil":      {"value": 0,
+                              "unit": "km",    "error": None},
+        "distance_since_clr": {"value": 500 + _demo_tick // _DEMO_DISTANCE_INCREMENT,
+                              "unit": "km",    "error": None},
+        "warmups_since_clr": {"value": 5,
+                              "unit": "count", "error": None},
+        "evap_pressure":     {"value": round(random.uniform(-50, 50), 1),
+                              "unit": "Pa",    "error": None},
     }
 
 
@@ -123,9 +157,19 @@ def create_app(connector=None, reader=None, writer=None, demo=False, stream_inte
     @app.route("/api/dtc")
     def api_dtc():
         if app.config["DEMO"] or app.config["READER"] is None:
-            return jsonify({"codes": []})
+            return jsonify({"codes": _DEMO_DTCS})
         try:
             codes = app.config["READER"].read_dtcs()
+            return jsonify({"codes": codes})
+        except Exception as exc:
+            return jsonify({"codes": [], "error": str(exc)})
+
+    @app.route("/api/dtc/pending")
+    def api_dtc_pending():
+        if app.config["DEMO"] or app.config["READER"] is None:
+            return jsonify({"codes": _DEMO_PENDING_DTCS})
+        try:
+            codes = app.config["READER"].read_pending_dtcs()
             return jsonify({"codes": codes})
         except Exception as exc:
             return jsonify({"codes": [], "error": str(exc)})

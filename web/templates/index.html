@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -19,6 +19,7 @@
     --muted:    #7d8590;
     --glow:     0 0 12px rgba(0,255,136,.35);
     --glow2:    0 0 20px rgba(0,212,170,.25);
+    --glow-warn: 0 0 14px rgba(255,149,0,.45);
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   body {
@@ -79,26 +80,38 @@
   /* ── ACTIONS BAR ─────────────────────────────────── */
   .actions {
     display: flex; flex-wrap: wrap; gap: 8px;
-    padding: 14px 24px;
+    padding: 12px 24px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+  .actions-group {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .actions-divider {
+    width: 1px; height: 28px;
+    background: var(--border);
+    margin: 0 4px;
   }
   .btn {
     font-family: 'Rajdhani', sans-serif;
     font-weight: 600;
     font-size: 0.85rem;
     letter-spacing: .5px;
-    padding: 7px 18px;
+    padding: 7px 16px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: transparent;
     color: var(--text);
     cursor: pointer;
     transition: all .2s;
+    white-space: nowrap;
   }
   .btn:hover { border-color: var(--accent2); color: var(--accent2); box-shadow: var(--glow2); }
   .btn-primary { border-color: var(--accent); color: var(--accent); }
   .btn-primary:hover { background: rgba(0,255,136,.08); box-shadow: var(--glow); }
+  .btn-warn { border-color: var(--warn); color: var(--warn); }
+  .btn-warn:hover { background: rgba(255,149,0,.08); box-shadow: var(--glow-warn); }
   .btn-danger { border-color: var(--danger); color: var(--danger); }
   .btn-danger:hover { background: rgba(255,59,48,.08); }
 
@@ -113,11 +126,19 @@
     margin-bottom: 14px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title .title-badge {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
   }
   .gauge-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
     margin-bottom: 28px;
   }
 
@@ -126,7 +147,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 18px 16px 14px;
+    padding: 16px 14px 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -134,16 +155,16 @@
   }
   .gauge-card:hover { border-color: var(--accent2); box-shadow: var(--glow2); }
   .gauge-label {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     text-align: center;
   }
 
   /* SVG arc gauge */
-  .arc-gauge { position: relative; width: 140px; height: 80px; overflow: visible; }
+  .arc-gauge { position: relative; width: 130px; height: 74px; overflow: visible; }
   .arc-track { stroke: var(--border); stroke-width: 10; fill: none; }
   .arc-fill  { stroke: var(--accent); stroke-width: 10; fill: none;
                stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
@@ -152,10 +173,10 @@
 
   .gauge-value {
     font-family: 'Orbitron', monospace;
-    font-size: 1.55rem;
+    font-size: 1.45rem;
     font-weight: 700;
     color: var(--accent);
-    margin-top: 6px;
+    margin-top: 4px;
     transition: color .3s;
     text-shadow: var(--glow);
     letter-spacing: 1px;
@@ -163,33 +184,114 @@
   .gauge-value.warn   { color: var(--warn); text-shadow: 0 0 10px rgba(255,149,0,.4); }
   .gauge-value.danger { color: var(--danger); text-shadow: 0 0 10px rgba(255,59,48,.4); }
   .gauge-unit {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--muted);
     margin-top: 2px;
     letter-spacing: 1px;
   }
 
+  /* ── STATS TABLE ─────────────────────────────────── */
+  .stats-section { margin-bottom: 28px; }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: border-color .3s;
+  }
+  .stat-card:hover { border-color: var(--accent2); }
+  .stat-label {
+    font-size: 0.78rem;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .stat-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent2);
+    letter-spacing: 1px;
+    text-align: right;
+  }
+  .stat-unit {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-align: right;
+    margin-top: 1px;
+  }
+
   /* ── DTC SECTION ─────────────────────────────────── */
   .dtc-section { margin-bottom: 28px; }
+  .dtc-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    font-size: 0.88rem;
+  }
+  .dtc-status-icon { font-size: 1.3rem; }
+  .dtc-status-text { flex: 1; }
+  .dtc-status-ok   { color: var(--accent); border-color: rgba(0,255,136,.2); }
+  .dtc-status-warn { color: var(--warn);   border-color: rgba(255,149,0,.3); background: rgba(255,149,0,.05); }
   .dtc-list {
     display: flex; flex-wrap: wrap; gap: 10px;
     min-height: 42px;
-    align-items: center;
+    align-items: flex-start;
   }
   .dtc-badge {
     font-family: 'Orbitron', monospace;
-    font-size: 0.8rem;
-    background: rgba(255,59,48,.12);
+    font-size: 0.82rem;
+    background: rgba(255,59,48,.10);
     border: 1px solid rgba(255,59,48,.4);
     color: var(--danger);
-    padding: 5px 14px;
-    border-radius: 20px;
+    padding: 8px 14px;
+    border-radius: 10px;
     letter-spacing: 1px;
+    cursor: pointer;
+    transition: all .2s;
+    min-width: 110px;
   }
-  .dtc-clear {
-    font-size: 0.82rem;
+  .dtc-badge:hover { background: rgba(255,59,48,.20); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,59,48,.2); }
+  .dtc-badge-desc {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.72rem;
     color: var(--muted);
-    font-style: italic;
+    margin-top: 4px;
+    letter-spacing: 0;
+    line-height: 1.35;
+  }
+  .dtc-badge-cat {
+    font-size: 0.65rem;
+    color: rgba(255,149,0,.8);
+    margin-top: 2px;
+    letter-spacing: .5px;
+  }
+  .dtc-badge-pending {
+    background: rgba(255,149,0,.10);
+    border-color: rgba(255,149,0,.4);
+    color: var(--warn);
+  }
+  .dtc-badge-pending:hover { background: rgba(255,149,0,.18); }
+  .dtc-empty {
+    font-size: 0.88rem;
+    color: var(--accent);
+    padding: 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   /* ── TERMINAL ────────────────────────────────────── */
@@ -268,6 +370,18 @@
     z-index: 999;
   }
   #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── MIL BADGE ───────────────────────────────────── */
+  #mil-badge {
+    padding: 7px 16px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    display: none;
+    cursor: pointer;
+  }
+  #mil-badge.mil-on  { background: rgba(255,59,48,.18); color: var(--danger); border: 1px solid rgba(255,59,48,.5); animation: pulse-warn 2s ease-in-out infinite; }
+  #mil-badge.mil-off { background: rgba(0,255,136,.08); color: var(--accent); border: 1px solid rgba(0,255,136,.3); }
 </style>
 </head>
 <body>
@@ -285,84 +399,168 @@
 
 <!-- ── ACTIONS ────────────────────────────────────────── -->
 <div class="actions">
-  <button class="btn btn-primary" onclick="scanAll()">⟳ Scan All</button>
-  <button class="btn" onclick="readDTC()">⚠ Read DTCs</button>
-  <button class="btn btn-danger" onclick="clearDTC()">✕ Clear DTCs</button>
-  <button class="btn" onclick="loadVehicleInfo()">🚗 Vehicle Info</button>
-  <button class="btn" onclick="exportCSV()">↓ Export CSV</button>
-  <button class="btn" id="stream-btn" onclick="toggleStream()">▶ Live Stream</button>
-  <span id="mil-badge" style="display:none;padding:7px 16px;border-radius:6px;font-size:0.82rem;font-weight:700;"></span>
+  <div class="actions-group">
+    <button class="btn btn-primary" onclick="scanAll()">⟳ Scan All</button>
+    <button class="btn" id="stream-btn" onclick="toggleStream()">▶ Live Stream</button>
+    <button class="btn" onclick="loadVehicleInfo()">🚗 Vehicle Info</button>
+    <button class="btn" onclick="exportCSV()">↓ Export CSV</button>
+  </div>
+  <div class="actions-divider"></div>
+  <div class="actions-group">
+    <button class="btn btn-warn" onclick="readDTC()" title="Ler falhas armazenadas (Modo 03)">⚠ Ler Erros</button>
+    <button class="btn" onclick="readPendingDTC()" title="Ler falhas pendentes (Modo 07)" style="border-color:var(--warn);color:var(--warn);opacity:.75">📋 Pendentes</button>
+    <button class="btn btn-danger" onclick="clearDTC()" title="Apagar todos os códigos de falha (Modo 04)">✕ Limpar Erros</button>
+  </div>
+  <span id="mil-badge" onclick="readDTC()"></span>
 </div>
 
 <!-- ── MAIN ───────────────────────────────────────────── -->
 <main>
-  <p class="section-title">Sensor Readings</p>
+
+  <!-- DTC Status banner (always visible) -->
+  <div id="dtc-status-bar" class="dtc-status-bar" style="display:none;">
+    <span class="dtc-status-icon" id="dtc-status-icon">⚠</span>
+    <span class="dtc-status-text" id="dtc-status-text"></span>
+    <button class="btn btn-warn" onclick="readDTC()" style="padding:4px 12px;font-size:0.78rem;">Ver Detalhes</button>
+  </div>
+
+  <!-- Sensor Gauges -->
+  <p class="section-title">📊 Leituras dos Sensores</p>
   <div class="gauge-grid" id="gauge-grid">
     <!-- cards injected by JS -->
   </div>
 
-  <!-- DTC -->
-  <div class="dtc-section">
-    <p class="section-title">Diagnostic Trouble Codes</p>
+  <!-- Trip & Statistics -->
+  <p class="section-title">🗺 Computador de Bordo &amp; Estatísticas</p>
+  <div class="stats-grid" id="stats-grid">
+    <!-- stat cards injected by JS -->
+  </div>
+
+  <!-- DTC Section -->
+  <div class="dtc-section" id="dtc-section">
+    <p class="section-title">
+      ⚠ Diagnóstico – Códigos de Falha (DTC)
+      <span id="dtc-count-badge" class="title-badge" style="display:none;background:rgba(255,59,48,.15);color:var(--danger);border:1px solid rgba(255,59,48,.3);"></span>
+    </p>
     <div class="dtc-list" id="dtc-list">
-      <span class="dtc-clear">No codes read yet — click "Read DTCs"</span>
+      <span class="dtc-empty">
+        <span style="color:var(--muted)">—</span>
+        <span style="color:var(--muted)">Nenhum código lido ainda — clique em <strong style="color:var(--warn)">⚠ Ler Erros</strong></span>
+      </span>
     </div>
   </div>
 
   <!-- Vehicle Info -->
   <div class="dtc-section" id="vehicle-info-section" style="display:none;">
-    <p class="section-title">Vehicle Information</p>
+    <p class="section-title">🪪 Informações do Veículo</p>
     <table id="vehicle-info-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;">
     </table>
   </div>
 
   <!-- Terminal -->
   <div class="terminal-section">
-    <p class="section-title">Command Terminal</p>
+    <p class="section-title">💻 Terminal de Comandos</p>
     <div class="terminal-box" id="terminal">
-      <span class="t-resp">// OBD2 Terminal ready — type AT or OBD2 commands below</span><br/>
+      <span class="t-resp">// Terminal OBD2 pronto — digite comandos AT ou OBD2 abaixo</span><br/>
     </div>
     <div class="terminal-input-row">
-      <input class="terminal-input" id="term-input" placeholder="e.g. AT RV  or  010C" onkeydown="termKeydown(event)"/>
-      <button class="btn btn-primary" onclick="termSend()">Send</button>
+      <input class="terminal-input" id="term-input" placeholder="ex: AT RV  ou  010C  ou  03" onkeydown="termKeydown(event)"/>
+      <button class="btn btn-primary" onclick="termSend()">Enviar</button>
     </div>
   </div>
 </main>
 
-<footer>OBD2 Connector Dashboard &nbsp;·&nbsp; <span id="last-update">—</span></footer>
+<footer>OBD2 Dashboard &nbsp;·&nbsp; ELM327 Bluetooth/USB &nbsp;·&nbsp; <span id="last-update">—</span></footer>
 <div id="toast"></div>
 
 <script>
-// ── GAUGE DEFINITIONS ──────────────────────────────────────────
+// ── GAUGE DEFINITIONS (all OBD sensors, matching CLI dash) ─────────────────
 const GAUGES = [
-  { key:'rpm',          label:'Engine RPM',     min:0, max:8000,  warnAt:5500, dangerAt:7000 },
-  { key:'speed',        label:'Vehicle Speed',  min:0, max:220,   warnAt:160,  dangerAt:200  },
-  { key:'coolant_temp', label:'Coolant Temp',   min:50,max:130,   warnAt:105,  dangerAt:115  },
-  { key:'engine_load',  label:'Engine Load',    min:0, max:100,   warnAt:75,   dangerAt:90   },
-  { key:'throttle',     label:'Throttle',       min:0, max:100,   warnAt:80,   dangerAt:95   },
-  { key:'fuel_level',   label:'Fuel Level',     min:0, max:100,   warnAt:15,   dangerAt:8    },
-  { key:'intake_temp',  label:'Intake Air Temp',min:0, max:80,    warnAt:50,   dangerAt:65   },
-  { key:'maf',          label:'MAF Sensor',     min:0, max:50,    warnAt:35,   dangerAt:45   },
-  { key:'timing_advance', label:'Timing Advance', min:-20,max:60,   warnAt:50,   dangerAt:55   },
-  { key:'voltage',      label:'Battery Voltage',min:8, max:16,    warnAt:11.5, dangerAt:10.5 },
-  { key:'oil_temp',     label:'Oil Temp',       min:40,max:150,   warnAt:120,  dangerAt:135  },
+  { key:'rpm',              label:'RPM do Motor',          min:0,   max:8000,  warnAt:5500,  dangerAt:7000, invertWarn:false },
+  { key:'speed',            label:'Velocidade',            min:0,   max:220,   warnAt:160,   dangerAt:200,  invertWarn:false },
+  { key:'coolant_temp',     label:'Temp. Arrefecimento',   min:50,  max:130,   warnAt:105,   dangerAt:115,  invertWarn:false },
+  { key:'engine_load',      label:'Carga do Motor',        min:0,   max:100,   warnAt:75,    dangerAt:90,   invertWarn:false },
+  { key:'throttle',         label:'Acelerador',            min:0,   max:100,   warnAt:80,    dangerAt:95,   invertWarn:false },
+  { key:'fuel_level',       label:'Nível de Combustível',  min:0,   max:100,   warnAt:15,    dangerAt:8,    invertWarn:true  },
+  { key:'intake_temp',      label:'Temp. Admissão',        min:0,   max:80,    warnAt:50,    dangerAt:65,   invertWarn:false },
+  { key:'maf',              label:'Sensor MAF',            min:0,   max:50,    warnAt:35,    dangerAt:45,   invertWarn:false },
+  { key:'timing_advance',   label:'Avanço de Ignição',     min:-20, max:60,    warnAt:50,    dangerAt:55,   invertWarn:false },
+  { key:'voltage',          label:'Tensão da Bateria',     min:8,   max:16,    warnAt:11.5,  dangerAt:10.5, invertWarn:true  },
+  { key:'oil_temp',         label:'Temp. do Óleo',         min:40,  max:150,   warnAt:120,   dangerAt:135,  invertWarn:false },
+  { key:'map',              label:'Pressão Coletor (MAP)', min:0,   max:255,   warnAt:220,   dangerAt:245,  invertWarn:false },
+  { key:'fuel_rate',        label:'Consumo Instantâneo',   min:0,   max:30,    warnAt:20,    dangerAt:27,   invertWarn:false },
+  { key:'short_fuel_trim_1',label:'Trim Comb. Curto (B1)', min:-30, max:30,    warnAt:20,    dangerAt:25,   invertWarn:false },
+  { key:'long_fuel_trim_1', label:'Trim Comb. Longo (B1)', min:-30, max:30,    warnAt:15,    dangerAt:20,   invertWarn:false },
+  { key:'baro_pressure',    label:'Pressão Barométrica',   min:60,  max:110,   warnAt:105,   dangerAt:108,  invertWarn:false },
+  { key:'ambient_temp',     label:'Temp. Ambiente',        min:-20, max:60,    warnAt:45,    dangerAt:55,   invertWarn:false },
+  { key:'abs_load',         label:'Carga Absoluta',        min:0,   max:100,   warnAt:85,    dangerAt:95,   invertWarn:false },
 ];
 
-// Arc geometry: half-circle, cx=70, cy=70, r=55, from 180° to 0° (left→right)
-const CX=70, CY=70, R=55;
-const ARC_LEN = Math.PI * R; // half-circle circumference
+// ── STATS (trip/runtime sensors shown as table) ────────────────────────────
+const STATS = [
+  { key:'runtime',            label:'Tempo de Funcionamento', unit:'s'     },
+  { key:'distance_mil',       label:'Distância c/ MIL Ligada', unit:'km'  },
+  { key:'distance_since_clr', label:'Dist. desde Limpeza DTC', unit:'km'  },
+  { key:'warmups_since_clr',  label:'Aquecimentos desde Limpeza', unit:'' },
+  { key:'evap_pressure',      label:'Pressão Evap. Sistema',  unit:'Pa'   },
+];
 
-function polarToXY(angleDeg, r) {
-  const a = (angleDeg * Math.PI) / 180;
-  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+// ── DTC DESCRIPTIONS (most common codes) ──────────────────────────────────
+const DTC_DESCRIPTIONS = {
+  // MAF
+  'P0100':'Defeito no circuito do sensor MAF','P0101':'MAF fora da faixa/desempenho','P0102':'MAF – sinal baixo','P0103':'MAF – sinal alto','P0104':'MAF – sinal intermitente',
+  // IAT
+  'P0110':'Defeito no sensor de temperatura de admissão (IAT)','P0112':'IAT – sinal baixo','P0113':'IAT – sinal alto',
+  // Coolant
+  'P0115':'Defeito no sensor de temperatura do arrefecimento (ECT)','P0116':'ECT fora da faixa/desempenho','P0117':'ECT – sinal baixo','P0118':'ECT – sinal alto',
+  // TPS
+  'P0120':'Defeito no sensor de posição do acelerador (TPS)','P0121':'TPS fora da faixa/desempenho','P0122':'TPS – sinal baixo','P0123':'TPS – sinal alto',
+  // O2 sensors
+  'P0130':'Defeito no sensor O2 (Banco 1, Sensor 1)','P0131':'O2 B1S1 – tensão baixa','P0132':'O2 B1S1 – tensão alta','P0133':'O2 B1S1 – resposta lenta','P0134':'O2 B1S1 – sem atividade','P0135':'Aquecedor O2 B1S1 – defeito','P0136':'Defeito no sensor O2 (B1S2)','P0140':'O2 B1S2 – sem atividade','P0141':'Aquecedor O2 B1S2 – defeito','P0143':'O2 B1S3 – tensão baixa','P0150':'Defeito no sensor O2 (B2S1)',
+  // Fuel trim / rich/lean
+  'P0171':'Sistema muito pobre (Banco 1)','P0172':'Sistema muito rico (Banco 1)','P0174':'Sistema muito pobre (Banco 2)','P0175':'Sistema muito rico (Banco 2)',
+  // INJECTORS (injeção)
+  'P0200':'Defeito no circuito dos injetores','P0201':'Defeito no injetor – Cilindro 1','P0202':'Defeito no injetor – Cilindro 2','P0203':'Defeito no injetor – Cilindro 3','P0204':'Defeito no injetor – Cilindro 4','P0205':'Defeito no injetor – Cilindro 5','P0206':'Defeito no injetor – Cilindro 6','P0207':'Defeito no injetor – Cilindro 7','P0208':'Defeito no injetor – Cilindro 8',
+  // Misfires
+  'P0300':'Falha de ignição aleatória/múltipla','P0301':'Falha de ignição – Cilindro 1','P0302':'Falha de ignição – Cilindro 2','P0303':'Falha de ignição – Cilindro 3','P0304':'Falha de ignição – Cilindro 4','P0305':'Falha de ignição – Cilindro 5','P0306':'Falha de ignição – Cilindro 6',
+  // Camshaft
+  'P0340':'Defeito no sensor de posição do comando de válvulas','P0341':'Sensor de posição do comando fora da faixa',
+  // Ignition coil
+  'P0351':'Circuito da bobina de ignição A','P0352':'Circuito da bobina de ignição B',
+  // EGR
+  'P0400':'Defeito no fluxo de EGR (recirculação de gases)','P0401':'Fluxo de EGR insuficiente','P0402':'Fluxo de EGR excessivo','P0404':'EGR fora da faixa/desempenho','P0405':'Sensor EGR A – sinal baixo','P0406':'Sensor EGR A – sinal alto',
+  // Catalyst
+  'P0420':'Eficiência do catalisador abaixo do limite (Banco 1)','P0421':'Catalisador de aquecimento abaixo do limite (B1)','P0430':'Eficiência do catalisador abaixo do limite (Banco 2)',
+  // EVAP
+  'P0440':'Defeito no sistema de emissões evaporativas','P0441':'Purge flow incorreto no sistema EVAP','P0442':'Vazamento pequeno detectado no sistema EVAP','P0443':'Circuito da válvula de purge EVAP','P0446':'Circuito de ventilação EVAP','P0455':'Vazamento grande detectado no sistema EVAP','P0456':'Vazamento muito pequeno detectado no sistema EVAP',
+  // Speed / Idle
+  'P0500':'Defeito no sensor de velocidade do veículo','P0505':'Defeito no sistema de controle do marcha lenta','P0506':'RPM de marcha lenta muito baixo','P0507':'RPM de marcha lenta muito alto',
+  // CAN / ECM
+  'P0600':'Defeito no link de comunicação serial','P0601':'Defeito na memória do ECM (ROM)','P0602':'ECM – erro de programação',
+  // Transmission
+  'P0700':'Defeito no sistema de controle da transmissão','P0705':'Sensor de faixa da transmissão – defeito','P0710':'Sensor de temperatura do fluido da transmissão','P0715':'Sensor de velocidade da turbina – defeito','P0720':'Sensor de velocidade de saída – defeito','P0730':'Relação de marcha incorreta','P0740':'Defeito na embreagem do conversor de torque',
+};
+
+const DTC_SYSTEMS = { 'P':'Powertrain','C':'Chassis','B':'Body','U':'Network' };
+const DTC_TYPES   = { '0':'Genérico','1':'Fabricante','2':'Genérico','3':'Fabricante' };
+
+function getDTCInfo(code) {
+  const system = DTC_SYSTEMS[code[0]] || 'Desconhecido';
+  const type   = DTC_TYPES[code[1]]   || '';
+  const desc   = DTC_DESCRIPTIONS[code] || null;
+  return { system, type, desc };
 }
+
+// ── ARC GAUGE GEOMETRY ─────────────────────────────────────────────────────
+const CX = 65, CY = 65, R = 50;
+const ARC_LEN = Math.PI * R;
 
 function buildGaugeCard(g) {
   const card = document.createElement('div');
   card.className = 'gauge-card';
   card.innerHTML = `
     <div class="gauge-label">${g.label}</div>
-    <svg class="arc-gauge" viewBox="0 0 140 80">
+    <svg class="arc-gauge" viewBox="0 0 130 72">
       <path class="arc-track" d="M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}"/>
       <path class="arc-fill" id="arc-${g.key}"
             d="M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}"
@@ -386,17 +584,12 @@ function updateGauge(g, value, unit) {
   const unitEl = document.getElementById(`unit-${g.key}`);
   if (value === null || value === undefined) return;
 
-  // Clamp
   const span = g.max - g.min;
   const pct  = Math.max(0, Math.min(1, (value - g.min) / span));
-  const offset = ARC_LEN * (1 - pct);
+  arcEl.style.strokeDashoffset = ARC_LEN * (1 - pct);
 
-  arcEl.style.strokeDashoffset = offset;
-
-  // Color
-  const isBelowWarn = g.key === 'fuel_level'; // invert: low is bad
   let cls = '';
-  if (isBelowWarn) {
+  if (g.invertWarn) {
     if (value <= g.dangerAt) cls = 'danger';
     else if (value <= g.warnAt) cls = 'warn';
   } else {
@@ -411,24 +604,173 @@ function updateGauge(g, value, unit) {
   unitEl.textContent = unit || '';
 }
 
-// ── VEHICLE INFO ───────────────────────────────────────────────
-async function loadVehicleInfo() {
-  const section = document.getElementById('vehicle-info-section');
-  const tbl = document.getElementById('vehicle-info-table');
-  tbl.innerHTML = '<tr><td colspan="2" style="color:var(--muted);padding:10px">Loading…</td></tr>';
-  section.style.display = '';
-  try {
-    const r = await fetch('/api/vehicle_info');
-    const d = await r.json();
-    if (d.error) { tbl.innerHTML = `<tr><td colspan="2" style="color:var(--danger)">${d.error}</td></tr>`; return; }
-    const fields = [
-      ['VIN', d.vin], ['ECU Name', d.ecu_name], ['Calibration ID', d.calibration_id],
-      ['Protocol', d.protocol], ['ELM327 Version', d.elm_version], ['Battery Voltage', d.battery_voltage],
-    ];
-    tbl.innerHTML = fields.map(([k,v]) => `<tr><td>${k}</td><td style="font-family:'Orbitron',monospace;font-size:0.82rem;color:var(--accent2)">${v||'N/A'}</td></tr>`).join('');
-  } catch(e) { tbl.innerHTML = `<tr><td colspan="2" style="color:var(--danger)">Error: ${e}</td></tr>`; }
+// ── STATS TABLE ────────────────────────────────────────────────────────────
+function initStats() {
+  const grid = document.getElementById('stats-grid');
+  STATS.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    card.innerHTML = `
+      <div>
+        <div class="stat-label">${s.label}</div>
+      </div>
+      <div>
+        <div class="stat-value" id="stat-${s.key}">—</div>
+        <div class="stat-unit">${s.unit}</div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
 }
 
+function updateStats(sensors) {
+  STATS.forEach(s => {
+    const el = document.getElementById(`stat-${s.key}`);
+    if (!el) return;
+    const d = sensors[s.key];
+    if (d && d.value !== null && d.value !== undefined) {
+      el.textContent = typeof d.value === 'number' ? (Number.isInteger(d.value) ? d.value : d.value.toFixed(1)) : d.value;
+    }
+  });
+}
+
+// ── SENSOR DATA ────────────────────────────────────────────────────────────
+function applySensorData(sensors) {
+  GAUGES.forEach(g => {
+    const s = sensors[g.key];
+    if (s) updateGauge(g, s.value, s.unit);
+  });
+  updateStats(sensors);
+  document.getElementById('last-update').textContent = 'Última atualização: ' + new Date().toLocaleTimeString('pt-BR');
+}
+
+async function scanAll() {
+  showToast('Lendo sensores…');
+  try {
+    const r = await fetch('/api/sensors');
+    const d = await r.json();
+    applySensorData(d.sensors || {});
+    showToast('Leitura completa ✓');
+  } catch(e) { showToast('Falha na leitura: ' + e, true); }
+}
+
+// ── STATUS ─────────────────────────────────────────────────────────────────
+async function updateStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    const dot = document.getElementById('dot');
+    const txt = document.getElementById('status-text');
+    dot.className = 'status-dot' + (d.connected ? ' connected' : '');
+    txt.textContent = d.connected ? 'Conectado' : 'Desconectado';
+    document.getElementById('status-port').textContent = d.port || '—';
+    document.getElementById('status-mode').textContent = d.mode || '—';
+  } catch(_) {}
+}
+
+// ── DTC ────────────────────────────────────────────────────────────────────
+function _renderDTCList(codes, pending, scrollOnFound) {
+  const el = document.getElementById('dtc-list');
+  const badge = document.getElementById('dtc-count-badge');
+  const statusBar = document.getElementById('dtc-status-bar');
+  const statusText = document.getElementById('dtc-status-text');
+  const statusIcon = document.getElementById('dtc-status-icon');
+
+  if (!codes || codes.length === 0) {
+    el.innerHTML = `<span class="dtc-empty">✓ Nenhum código de falha ${pending ? 'pendente' : 'armazenado'} encontrado</span>`;
+    badge.style.display = 'none';
+    if (!pending) {
+      statusBar.style.display = '';
+      statusBar.className = 'dtc-status-bar dtc-status-ok';
+      statusIcon.textContent = '✓';
+      statusText.textContent = 'Sistema sem falhas — nenhum DTC armazenado';
+    }
+  } else {
+    const label = pending ? 'pendente' : 'armazenado';
+    el.innerHTML = codes.map(c => {
+      const info = getDTCInfo(c);
+      const descLine = info.desc
+        ? `<div class="dtc-badge-desc">${info.desc}</div>`
+        : `<div class="dtc-badge-desc">${info.system} – ${info.type}</div>`;
+      const catLine = `<div class="dtc-badge-cat">${info.system.toUpperCase()} · ${info.type.toUpperCase()}</div>`;
+      return `<div class="dtc-badge ${pending ? 'dtc-badge-pending' : ''}" title="Clique para pesquisar" onclick="searchDTC('${c}')">${c}${catLine}${descLine}</div>`;
+    }).join('');
+    badge.style.display = '';
+    badge.textContent = `${codes.length} código${codes.length > 1 ? 's' : ''} ${label}${codes.length > 1 ? 's' : ''}`;
+    if (!pending) {
+      statusBar.style.display = '';
+      statusBar.className = 'dtc-status-bar dtc-status-warn';
+      statusIcon.textContent = '⚠';
+      statusText.innerHTML = `<strong>${codes.length} falha${codes.length > 1 ? 's' : ''} armazenada${codes.length > 1 ? 's' : ''}</strong> — clique em "Ver Detalhes" ou role a página até a seção de diagnóstico`;
+    }
+    // Scroll only when explicitly requested (not on clearDTC or live-stream updates)
+    if (scrollOnFound) {
+      document.getElementById('dtc-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+}
+
+async function readDTC() {
+  const el = document.getElementById('dtc-list');
+  el.innerHTML = '<span style="color:var(--muted)">Lendo falhas armazenadas…</span>';
+  try {
+    const r = await fetch('/api/dtc');
+    const d = await r.json();
+    _renderDTCList(d.codes, false, true);
+    if (d.codes && d.codes.length > 0) {
+      showToast(`⚠ ${d.codes.length} código${d.codes.length > 1 ? 's' : ''} encontrado${d.codes.length > 1 ? 's' : ''}`, true);
+    } else {
+      showToast('Sem falhas armazenadas ✓');
+    }
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">Erro: ${e}</span>`;
+    showToast('Erro ao ler DTCs', true);
+  }
+}
+
+async function readPendingDTC() {
+  const el = document.getElementById('dtc-list');
+  el.innerHTML = '<span style="color:var(--muted)">Lendo falhas pendentes…</span>';
+  try {
+    const r = await fetch('/api/dtc/pending');
+    const d = await r.json();
+    _renderDTCList(d.codes, true, true);
+    if (d.codes && d.codes.length > 0) {
+      showToast(`📋 ${d.codes.length} código${d.codes.length > 1 ? 's' : ''} pendente${d.codes.length > 1 ? 's' : ''}`, true);
+    } else {
+      showToast('Sem falhas pendentes ✓');
+    }
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">Erro: ${e}</span>`;
+  }
+}
+
+async function clearDTC() {
+  if (!confirm('Apagar todos os códigos de falha armazenados?\n\nEsta ação não pode ser desfeita.')) return;
+  try {
+    const r = await fetch('/api/dtc/clear', {method:'POST'});
+    const d = await r.json();
+    if (d.success) {
+      showToast('Falhas apagadas ✓');
+      document.getElementById('dtc-list').innerHTML =
+        '<span class="dtc-empty">✓ Todos os DTCs foram apagados com sucesso</span>';
+      document.getElementById('dtc-count-badge').style.display = 'none';
+      const statusBar = document.getElementById('dtc-status-bar');
+      statusBar.style.display = '';
+      statusBar.className = 'dtc-status-bar dtc-status-ok';
+      document.getElementById('dtc-status-icon').textContent = '✓';
+      document.getElementById('dtc-status-text').textContent = 'DTCs apagados — faça um novo scan para confirmar';
+    } else {
+      showToast('Falha ao apagar DTCs', true);
+    }
+  } catch(e) { showToast('Erro: ' + e, true); }
+}
+
+function searchDTC(code) {
+  window.open(`https://www.google.com/search?q=OBD2+DTC+${code}+significado`, '_blank', 'noopener,noreferrer');
+}
+
+// ── MIL ────────────────────────────────────────────────────────────────────
 async function checkMIL() {
   try {
     const r = await fetch('/api/mil');
@@ -437,93 +779,43 @@ async function checkMIL() {
     if (d.mil_on === null || d.mil_on === undefined) { badge.style.display = 'none'; return; }
     badge.style.display = '';
     if (d.mil_on) {
-      badge.textContent = `⚠ CHECK ENGINE (${d.dtc_count} ${d.dtc_count === 1 ? 'Code' : 'Codes'})`;
-      badge.style.background = 'rgba(255,59,48,.18)';
-      badge.style.color = 'var(--danger)';
-      badge.style.border = '1px solid rgba(255,59,48,.5)';
+      badge.textContent = `⚠ CHECK ENGINE (${d.dtc_count} cód.)`;
+      badge.className = 'mil-on';
     } else {
-      badge.textContent = `✓ ENGINE OK`;
-      badge.style.background = 'rgba(0,255,136,.08)';
-      badge.style.color = 'var(--accent)';
-      badge.style.border = '1px solid rgba(0,255,136,.3)';
+      badge.textContent = `✓ MOTOR OK`;
+      badge.className = 'mil-off';
     }
   } catch(_) {}
 }
 
-// ── SENSOR DATA ────────────────────────────────────────────────
-function applySensorData(sensors) {
-  GAUGES.forEach(g => {
-    const s = sensors[g.key];
-    if (s) updateGauge(g, s.value, s.unit);
-  });
-  document.getElementById('last-update').textContent = 'Last update: ' + new Date().toLocaleTimeString();
-}
-
-async function scanAll() {
-  showToast('Scanning sensors…');
+// ── VEHICLE INFO ───────────────────────────────────────────────────────────
+async function loadVehicleInfo() {
+  const section = document.getElementById('vehicle-info-section');
+  const tbl = document.getElementById('vehicle-info-table');
+  tbl.innerHTML = '<tr><td colspan="2" style="color:var(--muted);padding:10px">Carregando…</td></tr>';
+  section.style.display = '';
+  section.scrollIntoView({ behavior:'smooth', block:'nearest' });
   try {
-    const r = await fetch('/api/sensors');
+    const r = await fetch('/api/vehicle_info');
     const d = await r.json();
-    applySensorData(d.sensors || {});
-    showToast('Scan complete ✓');
-  } catch(e) { showToast('Scan failed: ' + e, true); }
+    if (d.error) { tbl.innerHTML = `<tr><td colspan="2" style="color:var(--danger)">${d.error}</td></tr>`; return; }
+    const fields = [
+      ['VIN', d.vin],['Nome ECU', d.ecu_name],['ID Calibração', d.calibration_id],
+      ['Protocolo OBD', d.protocol],['Versão ELM327', d.elm_version],['Tensão Bateria', d.battery_voltage],
+    ];
+    tbl.innerHTML = fields.map(([k,v]) =>
+      `<tr><td>${k}</td><td style="font-family:'Orbitron',monospace;font-size:0.82rem;color:var(--accent2)">${v||'N/A'}</td></tr>`
+    ).join('');
+  } catch(e) { tbl.innerHTML = `<tr><td colspan="2" style="color:var(--danger)">Erro: ${e}</td></tr>`; }
 }
 
-// ── STATUS ─────────────────────────────────────────────────────
-async function updateStatus() {
-  try {
-    const r = await fetch('/api/status');
-    const d = await r.json();
-    const dot = document.getElementById('dot');
-    const txt = document.getElementById('status-text');
-    if (d.connected) {
-      dot.className = 'status-dot connected';
-      txt.textContent = 'Connected';
-    } else {
-      dot.className = 'status-dot';
-      txt.textContent = 'Disconnected';
-    }
-    document.getElementById('status-port').textContent = d.port || '—';
-    document.getElementById('status-mode').textContent = d.mode || '—';
-  } catch(_) {}
-}
-
-// ── DTC ────────────────────────────────────────────────────────
-async function readDTC() {
-  const el = document.getElementById('dtc-list');
-  el.innerHTML = '<span class="dtc-clear">Reading…</span>';
-  try {
-    const r = await fetch('/api/dtc');
-    const d = await r.json();
-    if (!d.codes || d.codes.length === 0) {
-      el.innerHTML = '<span class="dtc-clear" style="color:var(--accent)">✓ No fault codes</span>';
-    } else {
-      el.innerHTML = d.codes.map(c => `<span class="dtc-badge">${c}</span>`).join('');
-    }
-  } catch(e) { el.innerHTML = `<span class="dtc-clear" style="color:var(--danger)">Error: ${e}</span>`; }
-}
-
-async function clearDTC() {
-  if (!confirm('Clear all stored DTCs?')) return;
-  try {
-    const r = await fetch('/api/dtc/clear', {method:'POST'});
-    const d = await r.json();
-    if (d.success) {
-      showToast('DTCs cleared ✓');
-      document.getElementById('dtc-list').innerHTML = '<span class="dtc-clear" style="color:var(--accent)">✓ DTCs cleared</span>';
-    } else {
-      showToast('Clear failed', true);
-    }
-  } catch(e) { showToast('Error: ' + e, true); }
-}
-
-// ── EXPORT ─────────────────────────────────────────────────────
+// ── EXPORT ─────────────────────────────────────────────────────────────────
 function exportCSV() {
   window.location.href = '/api/export';
-  showToast('Downloading CSV…');
+  showToast('Baixando CSV…');
 }
 
-// ── LIVE STREAM ────────────────────────────────────────────────
+// ── LIVE STREAM ────────────────────────────────────────────────────────────
 let evtSource = null;
 function toggleStream() {
   const btn = document.getElementById('stream-btn');
@@ -540,10 +832,14 @@ function toggleStream() {
         if (d.status)  applyStatus(d.status);
       } catch(_) {}
     };
-    evtSource.onerror = () => { evtSource.close(); evtSource = null; btn.textContent = '▶ Live Stream'; btn.classList.remove('btn-primary'); };
-    btn.textContent = '⏹ Stop Stream';
+    evtSource.onerror = () => {
+      evtSource.close(); evtSource = null;
+      btn.textContent = '▶ Live Stream';
+      btn.classList.remove('btn-primary');
+    };
+    btn.textContent = '⏹ Parar Stream';
     btn.classList.add('btn-primary');
-    showToast('Live stream started');
+    showToast('Stream ao vivo iniciado');
   }
 }
 
@@ -551,12 +847,12 @@ function applyStatus(s) {
   const dot = document.getElementById('dot');
   const txt = document.getElementById('status-text');
   dot.className = 'status-dot' + (s.connected ? ' connected' : '');
-  txt.textContent = s.connected ? 'Connected' : 'Disconnected';
+  txt.textContent = s.connected ? 'Conectado' : 'Desconectado';
   document.getElementById('status-port').textContent = s.port || '—';
   document.getElementById('status-mode').textContent = s.mode || '—';
 }
 
-// ── TERMINAL ───────────────────────────────────────────────────
+// ── TERMINAL ───────────────────────────────────────────────────────────────
 const term = document.getElementById('terminal');
 
 function termAppend(html) {
@@ -580,14 +876,14 @@ async function termSend() {
       body: JSON.stringify({command: cmd})
     });
     const d = await r.json();
-    if (d.error) termAppend(`<span class="t-err">ERROR: ${d.error}</span>`);
-    else termAppend(`<span class="t-resp">${(d.response||'(empty)').replace(/\n/g,'<br/>')}</span>`);
+    if (d.error) termAppend(`<span class="t-err">ERRO: ${d.error}</span>`);
+    else termAppend(`<span class="t-resp">${(d.response||'(sem resposta)').replace(/\n/g,'<br/>')}</span>`);
   } catch(e) {
-    termAppend(`<span class="t-err">Fetch error: ${e}</span>`);
+    termAppend(`<span class="t-err">Erro de conexão: ${e}</span>`);
   }
 }
 
-// ── TOAST ──────────────────────────────────────────────────────
+// ── TOAST ──────────────────────────────────────────────────────────────────
 let toastTimer = null;
 function showToast(msg, isErr=false) {
   const el = document.getElementById('toast');
@@ -596,17 +892,17 @@ function showToast(msg, isErr=false) {
   el.style.color = isErr ? 'var(--danger)' : 'var(--accent2)';
   el.classList.add('show');
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
-// ── INIT ───────────────────────────────────────────────────────
+// ── INIT ───────────────────────────────────────────────────────────────────
 initGauges();
+initStats();
 updateStatus();
 scanAll();
 checkMIL();
-const streamStartDelayMs = 600; // brief delay to let initial scan complete before streaming
-// Auto-start live stream
-setTimeout(toggleStream, streamStartDelayMs);
+// Auto-start live stream after initial scan
+setTimeout(toggleStream, 800);
 </script>
 </body>
 </html>
