@@ -40,7 +40,7 @@ def _demo_sensors():
                          "unit": "°C",    "error": None},
         "maf":          {"value": round(max(2, 9 + 4 * math.sin(t * 0.6) + random.uniform(-0.3, 0.3)), 2),
                          "unit": "g/s",   "error": None},
-        "timing":       {"value": round(12 + 6 * math.sin(t * 0.2) + random.uniform(-0.5, 0.5), 1),
+        "timing_advance": {"value": round(12 + 6 * math.sin(t * 0.2) + random.uniform(-0.5, 0.5), 1),
                          "unit": "°",     "error": None},
         "voltage":      {"value": round(13.8 + 0.4 * math.sin(t * 0.05) + random.uniform(-0.05, 0.05), 2),
                          "unit": "V",     "error": None},
