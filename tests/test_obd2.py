@@ -602,3 +602,92 @@ class TestWebApp:
                 assert key.lower() in sensors, (
                     f"Demo sensor missing '{key.lower()}' – web and CLI dash must show the same sensors"
                 )
+
+
+# ---------------------------------------------------------------------------
+# cli/interface.py – _print_help
+# ---------------------------------------------------------------------------
+
+class TestCLIHelp:
+    """Tests for the interactive REPL help system."""
+
+    def _make_iface(self):
+        """Return a CLIInterface wired to a stub connector."""
+        from cli.interface import CLIInterface
+        stub = _StubConnector()
+        return CLIInterface(stub)
+
+    def test_command_help_dict_has_all_repl_commands(self):
+        """Every REPL command must have a detailed help entry."""
+        iface = self._make_iface()
+        expected = {
+            "scan", "dash", "dtc", "pending", "clear_dtc",
+            "mil", "freeze", "info", "trip", "send",
+            "export", "log", "help", "exit",
+        }
+        assert expected == set(iface._COMMAND_HELP.keys())
+
+    def test_command_help_entries_have_required_fields(self):
+        """Each help entry must contain usage, summary, description, and examples."""
+        iface = self._make_iface()
+        for cmd, detail in iface._COMMAND_HELP.items():
+            for field in ("usage", "summary", "description", "examples"):
+                assert field in detail, f"_COMMAND_HELP['{cmd}'] missing '{field}'"
+            for field in ("usage", "summary", "description", "examples"):
+                assert isinstance(detail[field], str) and detail[field].strip(), (
+                    f"_COMMAND_HELP['{cmd}']['{field}'] must be a non-empty string"
+                )
+
+    def test_print_help_general(self, capsys):
+        """help (no argument) should print the command table without raising."""
+        from rich.console import Console
+        from cli import interface as iface_module
+        buf = []
+        original_print = iface_module.console.print
+        iface_module.console.print = lambda *a, **kw: buf.append(str(a))
+    def test_print_help_general(self, capsys):
+        """help (no argument) should print the command table without raising."""
+        from cli import interface as iface_module
+        captured_args = []
+        original_print = iface_module.console.print
+        iface_module.console.print = lambda *a, **kw: captured_args.append(a)
+        try:
+            iface = self._make_iface()
+            iface._print_help(None)
+        finally:
+            iface_module.console.print = original_print
+        # Two calls: the Table and the tip string
+        assert len(captured_args) == 2
+        # Second arg is the tip string and must mention "help <command>"
+        tip = captured_args[1][0]
+        assert "help" in tip
+
+    def test_print_help_specific_command(self):
+        """help <command> should include the summary in its Panel renderable."""
+        from cli import interface as iface_module
+        captured_args = []
+        original_print = iface_module.console.print
+        iface_module.console.print = lambda *a, **kw: captured_args.append(a)
+        try:
+            iface = self._make_iface()
+            iface._print_help("scan")
+        finally:
+            iface_module.console.print = original_print
+        assert len(captured_args) == 1
+        panel = captured_args[0][0]
+        # Panel.renderable is the markup string – must include the summary
+        assert iface._COMMAND_HELP["scan"]["summary"] in panel.renderable
+
+    def test_print_help_unknown_command(self):
+        """help <unknown> should print an error message, not raise."""
+        from cli import interface as iface_module
+        captured = []
+        original_print = iface_module.console.print
+        iface_module.console.print = lambda *a, **kw: captured.append(str(a))
+        try:
+            iface = self._make_iface()
+            iface._print_help("nonexistent_command_xyz")
+        finally:
+            iface_module.console.print = original_print
+        assert len(captured) == 1
+        assert "No help available" in captured[0]

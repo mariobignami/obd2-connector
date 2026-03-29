@@ -381,7 +381,7 @@ class CLIInterface:
                 console.print("[yellow]Goodbye 👋[/]")
                 break
             elif cmd == "help":
-                self._print_help()
+                self._print_help(arg.strip() or None)
             elif cmd == "scan":
                 self.scan_all()
             elif cmd == "dash":
@@ -435,7 +435,194 @@ class CLIInterface:
             border_style="cyan",
         ))
 
-    def _print_help(self) -> None:
+    # Detailed per-command help text shown when the user runs `help <command>`.
+    _COMMAND_HELP: Dict[str, Dict[str, str]] = {
+        "scan": {
+            "usage":       "scan",
+            "summary":     "Read all OBD-II PIDs once and display a formatted table.",
+            "description": (
+                "Sends a single polling request for every supported PID (Mode 01) "
+                "and prints the results in a table with colour-coded status indicators.\n"
+                "Values that exceed alert thresholds are shown in red (high) or yellow (low).\n"
+                "Use [bold]dash[/bold] for a continuously-refreshing live view."
+            ),
+            "examples":    "scan",
+        },
+        "dash": {
+            "usage":       "dash [interval] [--log]",
+            "summary":     "Start a live-updating sensor dashboard.",
+            "description": (
+                "Polls all PIDs in a background thread and refreshes the terminal display "
+                "every [bold]interval[/bold] seconds (default 1.0).\n"
+                "A trip-computer panel shows elapsed time, distance, average and maximum speed.\n"
+                "Press [bold]Ctrl+C[/bold] to stop the dashboard and return to the prompt.\n"
+                "Pass [bold]--log[/bold] to save every snapshot to a timestamped CSV file."
+            ),
+            "examples":    "dash\ndash 0.5\ndash 2 --log",
+        },
+        "dtc": {
+            "usage":       "dtc",
+            "summary":     "Display stored Diagnostic Trouble Codes (Mode 03).",
+            "description": (
+                "Reads fault codes that the ECU has stored and turned the MIL "
+                "(check-engine light) on for.\n"
+                "Each code is shown with its system category (Powertrain, Chassis, Body, Network) "
+                "and manufacturer/generic subtype.\n"
+                "Use [bold]clear_dtc[/bold] to erase them, or [bold]pending[/bold] to see "
+                "codes that are detected but not yet stored."
+            ),
+            "examples":    "dtc",
+        },
+        "pending": {
+            "usage":       "pending",
+            "summary":     "Display pending DTCs (Mode 07).",
+            "description": (
+                "Reads fault codes that have been detected by the ECU but have not yet "
+                "been confirmed and stored (the MIL may still be off).\n"
+                "These codes can disappear on their own if the fault does not recur "
+                "in subsequent drive cycles."
+            ),
+            "examples":    "pending",
+        },
+        "clear_dtc": {
+            "usage":       "clear_dtc",
+            "summary":     "Erase all stored DTCs and reset the MIL (Mode 04).",
+            "description": (
+                "Sends the Mode 04 command to the ECU, which clears all stored DTCs, "
+                "turns off the check-engine light, and resets readiness monitors.\n"
+                "[bold red]This action cannot be undone.[/bold red] "
+                "A confirmation prompt is shown before the command is sent.\n"
+                "Note: the MIL may reappear if the underlying fault is still present."
+            ),
+            "examples":    "clear_dtc",
+        },
+        "mil": {
+            "usage":       "mil",
+            "summary":     "Show the MIL (check engine light) status and DTC count.",
+            "description": (
+                "Reads PID 01 01 (monitor status since DTCs cleared) to determine "
+                "whether the Malfunction Indicator Lamp is currently on and how many "
+                "DTCs are stored."
+            ),
+            "examples":    "mil",
+        },
+        "freeze": {
+            "usage":       "freeze [frame#]",
+            "summary":     "Read freeze-frame data captured at the time of a fault.",
+            "description": (
+                "Reads Mode 02 (freeze-frame) data for all supported PIDs at the "
+                "specified frame number (default 0).\n"
+                "Freeze frames contain a snapshot of sensor values recorded by the ECU "
+                "at the moment a fault was detected, which is useful for diagnosis."
+            ),
+            "examples":    "freeze\nfreeze 0\nfreeze 1",
+        },
+        "info": {
+            "usage":       "info",
+            "summary":     "Display vehicle and adapter information.",
+            "description": (
+                "Reads and displays:\n"
+                "  • [bold]VIN[/bold]             – Vehicle Identification Number (Mode 09 PID 02)\n"
+                "  • [bold]ECU Name[/bold]        – Electronic Control Unit name (Mode 09 PID 0A)\n"
+                "  • [bold]Calibration ID[/bold]  – Software calibration identifier (Mode 09 PID 04)\n"
+                "  • [bold]OBD Protocol[/bold]    – Active protocol reported by the ELM327 (AT DP)\n"
+                "  • [bold]ELM327 Version[/bold]  – Firmware version of the adapter (AT I)\n"
+                "  • [bold]Battery Voltage[/bold] – Control-module supply voltage (AT RV)"
+            ),
+            "examples":    "info",
+        },
+        "trip": {
+            "usage":       "trip",
+            "summary":     "Show trip-computer summary for the current session.",
+            "description": (
+                "Displays statistics accumulated since the dashboard was last started:\n"
+                "  • Elapsed time\n"
+                "  • Estimated distance (km)\n"
+                "  • Average speed (km/h)\n"
+                "  • Maximum speed (km/h)\n"
+                "  • Number of sensor samples collected\n"
+                "Data resets each time [bold]dash[/bold] or [bold]log[/bold] is run."
+            ),
+            "examples":    "trip",
+        },
+        "send": {
+            "usage":       "send <command>",
+            "summary":     "Send a raw AT or OBD-II command directly to the ELM327.",
+            "description": (
+                "Forwards [bold]command[/bold] verbatim to the adapter and prints the raw response.\n"
+                "Useful for debugging or accessing PIDs not covered by the built-in commands.\n"
+                "AT commands configure the ELM327 itself; OBD-II commands (hex) query the ECU.\n"
+                "Examples of useful AT commands:\n"
+                "  AT RV  – battery voltage\n"
+                "  AT I   – ELM327 firmware version\n"
+                "  AT DP  – current OBD protocol\n"
+                "  AT MA  – monitor all bus traffic"
+            ),
+            "examples":    "send AT RV\nsend AT I\nsend 0105",
+        },
+        "export": {
+            "usage":       "export [csv|json]",
+            "summary":     "Export session data to a file.",
+            "description": (
+                "Saves the sensor snapshots collected during this session to disk.\n"
+                "Format options:\n"
+                "  [bold]csv[/bold]  (default) – comma-separated values, one row per snapshot\n"
+                "  [bold]json[/bold]           – JSON array of snapshot objects\n"
+                "If no snapshots have been collected yet a single fresh scan is performed "
+                "and exported.\n"
+                "The output file is written to the current directory with a timestamped name."
+            ),
+            "examples":    "export\nexport csv\nexport json",
+        },
+        "log": {
+            "usage":       "log [interval]",
+            "summary":     "Start the live dashboard with CSV logging enabled.",
+            "description": (
+                "Equivalent to [bold]dash [interval] --log[/bold].\n"
+                "Runs the live sensor dashboard and automatically saves every snapshot "
+                "to a timestamped CSV file in the current directory.\n"
+                "Default refresh interval is 1.0 second."
+            ),
+            "examples":    "log\nlog 0.5\nlog 2",
+        },
+        "help": {
+            "usage":       "help [command]",
+            "summary":     "Show help for all commands or a specific command.",
+            "description": (
+                "Without an argument, displays the full command reference table.\n"
+                "With a command name, shows detailed usage, a full description, and examples."
+            ),
+            "examples":    "help\nhelp scan\nhelp send\nhelp export",
+        },
+        "exit": {
+            "usage":       "exit",
+            "summary":     "Disconnect from the adapter and quit.",
+            "description": (
+                "Closes the serial connection and exits the interactive prompt.\n"
+                "Aliases: [bold]quit[/bold], [bold]q[/bold]."
+            ),
+            "examples":    "exit",
+        },
+    }
+
+    def _print_help(self, topic: Optional[str] = None) -> None:
+        if topic:
+            topic = topic.lower()
+            detail = self._COMMAND_HELP.get(topic)
+            if detail is None:
+                console.print(f"[red]No help available for '{topic}'. Type 'help' for a command list.[/]")
+                return
+            console.print(Panel(
+                f"[bold cyan]{detail['usage']}[/bold cyan]\n\n"
+                f"[bold]{detail['summary']}[/bold]\n\n"
+                f"{detail['description']}\n\n"
+                f"[dim]Example(s):[/dim]\n"
+                + "\n".join(f"  [cyan]obd2> {ex}[/cyan]" for ex in detail["examples"].splitlines()),
+                title=f"help: {topic}",
+                border_style="cyan",
+            ))
+            return
+
         tbl = Table(box=box.SIMPLE, show_header=True, header_style="bold cyan")
         tbl.add_column("Command", style="bold cyan", no_wrap=True)
         tbl.add_column("Description")
@@ -453,9 +640,10 @@ class CLIInterface:
             ("send <cmd>",        "Send a raw AT or OBD2 command and show the response"),
             ("export [csv|json]", "Export session data to CSV (default) or JSON"),
             ("log [interval]",    "Like 'dash' but always logs to CSV"),
-            ("help",              "Show this help"),
+            ("help [command]",    "Show this help, or detailed help for a specific command"),
             ("exit",              "Disconnect and quit"),
         ]
         for c, d in commands:
             tbl.add_row(c, d)
         console.print(tbl)
+        console.print("[dim]Tip: type [bold]help <command>[/bold] for detailed help on any command.[/dim]")
